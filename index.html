@@ -44,7 +44,7 @@ header p{margin:0;color:var(--muted);max-width:62ch;font-size:14px}
 .tools{grid-area:tools}
 .layers{grid-area:layers;min-width:0}
 
-.floor{position:relative;width:100%;max-width:min(100%, 620px, max(300px, calc(100dvh - 260px)));margin-inline:auto;aspect-ratio:1/1;
+.floor{position:relative;flex:none;align-self:start;justify-self:center;width:100%;max-width:min(100%, 620px, max(300px, calc(100dvh - 260px)));margin-inline:auto;aspect-ratio:1/1;
   border-radius:6px;overflow:hidden;box-shadow:0 0 0 1px #00000060,0 16px 44px #00000080;touch-action:none;cursor:crosshair;user-select:none;-webkit-user-select:none}
 .floor.lit{cursor:default}
 .floor canvas{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
@@ -793,6 +793,12 @@ li.off .lrow{opacity:.5}
   $('scrim').onclick = () => setDrawer(false);
   document.addEventListener('keydown', e => { if (e.key==='Escape' && drawerOpen()) setDrawer(false); });
   matchMedia('(max-width:759px)').addEventListener('change', e => { if (!e.matches) setDrawer(false); });
+
+  /* ---------- keep the floor square at every size (also covers browsers without aspect-ratio) ---------- */
+  let lastSide = 0;
+  const squareFloor = () => { const w = floorEl.getBoundingClientRect().width; if (w && Math.abs(w - lastSide) > .1){ lastSide = w; floorEl.style.height = w + 'px'; } };
+  if ('ResizeObserver' in window) new ResizeObserver(squareFloor).observe(floorEl);
+  addEventListener('resize', squareFloor); squareFloor();
 
   paintFloor(); paintGuides(); renderList(); updateButtons();
 })();
