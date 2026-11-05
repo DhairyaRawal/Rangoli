@@ -132,6 +132,18 @@ li.off .lrow{opacity:.5}
 .lock b{font-family:var(--display);font-weight:400;font-size:20px;color:var(--accent)}
 .lock span{font-size:14px;color:var(--ink);max-width:24ch;margin-inline:auto}
 .lock:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
+.minor,.major{display:contents}
+.btn.keep{background:transparent;color:var(--accent);border:2px solid var(--accent)}
+.btn.keep:hover{background:rgba(242,165,22,.12)}
+@media (max-width:759px){
+  .actions{display:grid;gap:12px;justify-content:stretch}
+  .minor{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .minor .btn{padding:9px 4px;font-size:13.5px}
+  .major{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:10px;padding-top:12px;border-top:1px dashed var(--line)}
+  .major .btn{min-height:54px;font:400 19px/1 var(--display);border-radius:10px}
+  .major .btn.primary{box-shadow:0 6px 22px rgba(242,165,22,.35)}
+  .major .btn.keep{box-shadow:none}
+}
 .titlebar{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .menuBtn,.closeBtn{display:none}
 @media (max-width:759px){
@@ -182,11 +194,15 @@ li.off .lrow{opacity:.5}
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
       </div>
       <div class="actions">
-        <button class="btn" id="undo" disabled>Undo</button>
-        <button class="btn" id="redo" disabled>Redo</button>
-        <button class="btn" id="clear">Sweep</button>
-        <button class="btn primary" id="done">Done</button>
-        <button class="btn" id="export" hidden>Export</button>
+        <div class="minor">
+          <button class="btn" id="undo" disabled>Undo</button>
+          <button class="btn" id="redo" disabled>Redo</button>
+          <button class="btn" id="clear">Sweep</button>
+        </div>
+        <div class="major">
+          <button class="btn primary" id="done">Done</button>
+          <button class="btn primary" id="export" hidden>Export</button>
+        </div>
       </div>
       <div class="confirm" id="confirm" hidden>
         Sweep the whole floor clean?
@@ -625,7 +641,7 @@ li.off .lrow{opacity:.5}
   $('done').onclick = () => {
     if (selId) deselect();
     lit=!lit; $('done').textContent = lit ? 'Keep decorating' : 'Done';
-    $('done').classList.toggle('primary', !lit); floorEl.classList.toggle('lit', lit); paintGuides();
+    $('done').classList.toggle('primary', !lit); $('done').classList.toggle('keep', lit); floorEl.classList.toggle('lit', lit); paintGuides();
     $('note').hidden = !lit;
     $('export').hidden = !lit;
     if (lit){ const d=diyaCount(layers); toast(d ? `${d} diya${d>1?'s':''} lit` : 'Rangoli finished. Add diyas to light them next time.');
