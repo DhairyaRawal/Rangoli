@@ -254,6 +254,10 @@ li.off .lrow{opacity:.5}
         <div class="label">Colour <b id="colorName"></b></div>
         <div class="swatches" id="swatches"></div>
       </div>
+      <div class="group" id="petalGroup" hidden>
+        <div class="label"><span>Petal placement</span><button class="mini" id="petalFill" type="button" aria-pressed="true">Fill shapes</button></div>
+        <p class="hint">Tap to scatter a few petals. Drag to lay a trail. With Fill shapes on, end your drag near where it began and the shape fills with petals.</p>
+      </div>
       <div class="group" id="flowerGroup" hidden>
         <div class="label">Marigold <b id="flowerName">Yellow</b></div>
         <div class="flpick" id="flowerPick"></div>
@@ -347,7 +351,8 @@ li.off .lrow{opacity:.5}
   const belowC = off(), aboveC = off(), selC = off();
   const belowX = belowC.getContext('2d'), aboveX = aboveC.getContext('2d'), selX = selC.getContext('2d');
 
-  const st = { tool:'powder', flower:'yellow', color:'#f5c518', size:10, n:8, k:8, mirror:false, guides:true };
+  const st = { tool:'powder', flower:'yellow', petalFill:true, color:'#f5c518', size:10, n:8, k:8, mirror:false, guides:true };
+  const flying = new WeakSet();
   let layers = [], hist = [], redoStack = [], selId = null, lit = false, nextId = 1;
   const counter = {}, pendingIds = new Set();
 
@@ -470,7 +475,7 @@ li.off .lrow{opacity:.5}
     if (!L.visible || pendingIds.has(L.id)) return;
     if (L.kind === 'powder'){ for (let i=0;i<L.pts.length;i++) powderStep(ctx,L,i); return; }
     const rnd = rng32(L.seed);
-    L.items.forEach(it => copiesOf(L,it[0],it[1],it[2]).forEach(c => {
+    L.items.forEach(it => !flying.has(it) && copiesOf(L,it[0],it[1],it[2]).forEach(c => {
       if (L.kind==='petal') drawPetal(ctx,c[0],c[1],c[2],L.size*it[3],L.color);
       else if (L.kind==='leaf') drawLeaf(ctx,c[0],c[1],c[2],L.size*it[3],L.color);
       else if (L.kind==='flower') drawFlower(ctx,c[0],c[1],c[2],L.size*it[3],L.variant);
@@ -529,11 +534,12 @@ li.off .lrow{opacity:.5}
     fx.clearRect(0,0,S,S);
     if (lit) drawLit(now);
     falling = falling.filter(f => {
-      const p = (now-f.t0)/f.dur; if (p<0) return true; if (p>=1) return false;
-      const heavy = f.kind==='flower', q=1-p, h=Math.pow(q,heavy?2:1.6)*(heavy?140:170), sway=Math.sin(p*Math.PI*3)*(heavy?4:12)*q*f.sway, sc=1+q*(heavy?.55:.9);
+      const p = (now-f.t0)/f.dur; if (p<0) return true;
+      if (p>=1){ if (f.bake) landPetal(f); return false; }
+      const heavy = f.kind==='flower', q=1-p, h=Math.pow(q,heavy?2:1.6)*(heavy?140:f.light?70:170), sway=Math.sin(p*Math.PI*3)*(heavy?4:12)*q*f.sway, sc=1+q*(heavy?.55:.9);
       const sr = heavy ? flowerR(f.s)*.95 : f.s*1.2;
-      fx.save(); fx.globalAlpha=Math.min(1,p*4)*.35*p; fx.fillStyle='#1a0603';
-      fx.beginPath(); fx.ellipse(f.x,f.y,sr,sr*(heavy?.85:.58),0,0,TAU); fx.fill(); fx.restore();
+      if (!f.light){ fx.save(); fx.globalAlpha=Math.min(1,p*4)*.35*p; fx.fillStyle='#1a0603';
+      fx.beginPath(); fx.ellipse(f.x,f.y,sr,sr*(heavy?.85:.58),0,0,TAU); fx.fill(); fx.restore(); }
       fx.save(); fx.globalAlpha=Math.min(1,p*4);
       if (heavy) drawFlower(fx,f.x+sway,f.y-h,f.a+q*f.spin*.35,f.s*sc,f.variant);
       else if (f.kind==='leaf') drawLeaf(fx,f.x+sway,f.y-h,f.a+q*f.spin,f.s*sc,f.color);
@@ -541,6 +547,7 @@ li.off .lrow{opacity:.5}
       fx.restore(); return true;
     });
     [...pendingIds].forEach(id => { if (!falling.some(f=>f.id===id)) finishPending(id); });
+    if (bakeDirty && !falling.some(f=>f.bake)){ bakeDirty=false; if (selId){ rebuildCaches(); composeSel(false); } else renderAll(); }
     if (lit || falling.length) requestAnimationFrame(loop); else { fxOn=false; fx.clearRect(0,0,S,S); }
   }
   function finishPending(id){
@@ -609,10 +616,9 @@ li.off .lrow{opacity:.5}
       active={L,frame}; lastPt=[x,y]; floorEl.setPointerCapture(e.pointerId); renderList(); return;
     }
     if (st.tool==='petal'){
-      const n=3+((Math.random()*3)|0), spread=st.size*1.8; L.items=[];
-      for (let i=0;i<n;i++){ const a=Math.random()*TAU, d=Math.random()*spread;
-        const [px,py]=clampPt(frame,x+Math.cos(a)*d,y+Math.sin(a)*d,sizeFor('petal')*1.2), lc=toLocal(frame,px,py);
-        L.items.push([lc[0],lc[1],Math.random()*TAU,.8+Math.random()*.35]); }
+      pushHistory(); L.items=[]; layers.push(L);
+      petalDrag={ L, frame, pts:[[x,y]], acc:0, len:0, moved:false, last:[x,y] };
+      floorEl.setPointerCapture(e.pointerId); renderList(); return;
     }
     if (st.tool==='leaf'){ const base = frame.zone==='radial' ? Math.atan2(y-C,x-C) : Math.atan2(C-y,C-x);
       L.items=[[...toLocal(frame,x,y), base+(Math.random()-.5)*.3, 1]]; }
@@ -633,12 +639,97 @@ li.off .lrow{opacity:.5}
     if (st.tool==='diya') toast(`${diyaCount(layers)} of ${MAX_DIYAS} diyas placed`);
   });
   floorEl.addEventListener('pointermove', e => {
+    if (petalDrag){
+      const d=petalDrag, r0=toCanvas(e), [x,y]=clampPt(d.frame,r0[0],r0[1],PETAL_M), [lx,ly]=d.last;
+      const step=Math.hypot(x-lx,y-ly); if (step<2.5) return;
+      d.len+=step; d.pts.push([x,y]); d.last=[x,y];
+      if (!d.moved && d.len>9){ d.moved=true; d.acc=TRAIL_GAP; }
+      if (!d.moved) return;
+      d.acc+=step;
+      const dir=Math.atan2(y-ly,x-lx), out=[];
+      while (d.acc>=TRAIL_GAP){
+        d.acc-=TRAIL_GAP; const t=1-d.acc/step, px=lx+(x-lx)*t, py=ly+(y-ly)*t, j=(Math.random()-.5)*5;
+        const [qx,qy]=clampPt(d.frame, px-Math.sin(dir)*j, py+Math.cos(dir)*j, PETAL_M);
+        out.push([qx,qy, dir+(Math.random()-.5)*.7+(Math.random()<.5?0:Math.PI), .82+Math.random()*.3]);
+      }
+      if (out.length) dropPetals(d.L, out, () => 0, false);
+      return;
+    }
     if (!active) return;
     const r0=toCanvas(e), [x,y]=clampPt(active.frame,r0[0],r0[1],margin('powder',active.frame,active.L.size)); if (Math.hypot(x-lastPt[0],y-lastPt[1])<2.5) return;
     lastPt=[x,y]; active.L.pts.push(toLocal(active.frame,x,y)); powderStep(art,active.L,active.L.pts.length-1);
   });
-  const endStroke = () => { if (active){ active=null; renderList(); } };
+  const endStroke = () => {
+    if (petalDrag){ const d=petalDrag; petalDrag=null; endPetals(d); return; }
+    if (active){ active=null; renderList(); }
+  };
   floorEl.addEventListener('pointerup', endStroke); floorEl.addEventListener('pointercancel', endStroke);
+
+  /* ---------- petal trails and filled shapes ---------- */
+  let petalDrag = null;
+  const PETAL_M = 12, TRAIL_GAP = 11, FILL_GAP = 10.5, FILL_BUDGET = 2400;
+  function endPetals(d){
+    const L=d.L, [x,y]=d.pts[0];
+    if (!d.moved){
+      const n=3+((Math.random()*3)|0), spread=18, items=[];
+      for (let i=0;i<n;i++){ const a=Math.random()*TAU, r=Math.random()*spread;
+        const [px,py]=clampPt(d.frame,x+Math.cos(a)*r,y+Math.sin(a)*r,PETAL_M);
+        items.push([px,py,Math.random()*TAU,.8+Math.random()*.35]); }
+      dropPetals(L, items, i => i*80, false); renderList(); return;
+    }
+    const [ex,ey]=d.pts.at(-1), poly=d.pts, area=Math.abs(polyArea(poly));
+    if (st.petalFill && d.len>140 && Math.hypot(ex-x,ey-y)<Math.max(48, d.len*.12) && area>1800){
+      fillShape(L, d.frame, poly, area);
+      toast('Shape filled with petals');
+    }
+    renderList();
+  }
+  function polyArea(P){ let a=0; for (let i=0,j=P.length-1;i<P.length;j=i++) a+=(P.at(j)[0]+P.at(i)[0])*(P.at(j)[1]-P.at(i)[1]); return a/2; }
+  function inPoly(x,y,P){ let c=false; for (let i=0,j=P.length-1;i<P.length;j=i++){ const [xi,yi]=P.at(i), [xj,yj]=P.at(j);
+    if ((yi>y)!==(yj>y) && x<(xj-xi)*(y-yi)/(yj-yi)+xi) c=!c; } return c; }
+  function fillShape(L, frame, P, area){
+    const copies=copyCount(L), cap=Math.max(60, Math.floor(FILL_BUDGET/copies));
+    const gap=Math.max(FILL_GAP, Math.sqrt(area/cap));
+    let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+    P.forEach(([px,py]) => { x0=Math.min(x0,px); y0=Math.min(y0,py); x1=Math.max(x1,px); y1=Math.max(y1,py); });
+    const items=[];
+    for (let gy=y0+gap/2; gy<y1; gy+=gap) for (let gx=x0+gap/2+((Math.round((gy-y0)/gap)%2)*gap/2); gx<x1; gx+=gap){
+      const px=gx+(Math.random()-.5)*gap*.8, py=gy+(Math.random()-.5)*gap*.8;
+      if (!inPoly(px,py,P)) continue;
+      const [qx,qy]=clampPt(frame,px,py,PETAL_M);
+      items.push([qx,qy,Math.random()*TAU,.78+Math.random()*.34]);
+      if (items.length>=cap) break;
+    }
+    if (!items.length) return;
+    const cx=items.reduce((t,i)=>t+i[0],0)/items.length, cy=items.reduce((t,i)=>t+i[1],0)/items.length;
+    const far=Math.max(1,...items.map(i=>Math.hypot(i[0]-cx,i[1]-cy)));
+    dropPetals(L, items, i => Math.hypot(items.at(i)[0]-cx, items.at(i)[1]-cy)/far*650 + Math.random()*90, true);
+  }
+  /* each petal lands on the floor as it finishes falling, so a trail grows while you drag */
+  /* petals are saved to the layer as soon as they drop (so undo always sees them); they are only drawn once they land */
+  function dropPetals(L, items, delayOf, light){
+    const cur=layers.find(l=>l.id===L.id); if (!cur) return;
+    cur.items=[...cur.items, ...items];
+    if (reduced){
+      const tmp={...cur, items}; if (layers.at(-1)===cur && !selId) renderLayer(art,tmp); else renderAll();
+      return;
+    }
+    items.forEach(it => flying.add(it));
+    const now=performance.now();
+    items.forEach((it,ii) => { const cps=copiesOf(cur,it[0],it[1],it[2]); const t=now+delayOf(ii);
+      cps.forEach((c,ci) => falling.push({ id:L.id, bake:it, kind:'petal', color:L.color, x:c[0], y:c[1], a:c[2], s:L.size*it[3],
+        t0:t+Math.min(ci*(light?5:14),light?120:400), dur:light?380+Math.random()*160:560+Math.random()*220, light,
+        spin:(Math.random()-.5)*(light?2:4), sway:Math.random()<.5?-1:1 })); });
+    kick();
+  }
+  function landPetal(f){
+    flying.delete(f.bake);
+    const cur=layers.find(l=>l.id===f.id && l.items.includes(f.bake)); if (!cur){ bakeDirty=true; return; }
+    if (cur.visible && layers.at(-1)===cur && !selId){
+      art.save(); drawPetal(art,f.x,f.y,f.a,f.s,cur.color); art.restore();
+    } else bakeDirty=true;
+  }
+  let bakeDirty=false;
 
   function dropLayer(L){
     pendingIds.add(L.id); const now=performance.now();
@@ -673,7 +764,7 @@ li.off .lrow{opacity:.5}
     st.tool=b.dataset.v; document.querySelectorAll('#toolSeg .btn').forEach(x=>x.setAttribute('aria-pressed',x===b));
     if (!okColor(st.tool, st.color)){ st.color = st.tool==='leaf' ? '#1d5a2c' : '#f28c13'; $('colorName').textContent=colorName(st.color); }
     refreshSw(); $('sizeGroup').hidden = !!FIXED_SIZE[st.tool];
-    $('colorGroup').hidden = st.tool==='flower' || st.tool==='diya'; $('flowerGroup').hidden = st.tool!=='flower';
+    $('colorGroup').hidden = st.tool==='flower' || st.tool==='diya'; $('flowerGroup').hidden = st.tool!=='flower'; $('petalGroup').hidden = st.tool!=='petal';
     if (st.tool==='diya') toast(`${diyaCount(layers)} of ${MAX_DIYAS} diyas placed. They stay unlit until you press Done.`);
   });
   const toggle = (id,key) => { const b=$(id); b.onclick=()=>{ st[key]=!st[key]; b.setAttribute('aria-pressed',st[key]); paintGuides(); status(); }; };
@@ -830,6 +921,8 @@ li.off .lrow{opacity:.5}
         "Couldn't save the file here. Right-click or long-press the picture to save it.");
     }
   };
+
+  $('petalFill').onclick = () => { st.petalFill=!st.petalFill; $('petalFill').setAttribute('aria-pressed', st.petalFill); };
 
   /* ---------- marigold pickers ---------- */
   function buildFlowerPick(el, get, pick){
