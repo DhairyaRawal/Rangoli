@@ -70,6 +70,9 @@ h2 small{font-family:var(--body);font-size:13px;color:var(--muted)}
 .seg.c9{grid-template-columns:repeat(9,1fr)}
 .seg.c4{grid-template-columns:repeat(4,1fr)}
 .seg.c3{grid-template-columns:repeat(3,1fr)}
+#toolSeg{grid-template-columns:repeat(6,1fr)}
+#toolSeg .btn{grid-column:span 2}
+#toolSeg .btn:nth-child(n+4){grid-column:span 3}
 .btn{appearance:none;font:600 14px/1 var(--body);color:var(--ink);background:var(--tray-2);border:1px solid var(--line);
   border-radius:6px;padding:10px 6px;cursor:pointer;transition:background .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .seg .btn{padding:9px 2px;font-size:13.5px;font-variant-numeric:tabular-nums}
@@ -241,7 +244,6 @@ li.off .lrow{opacity:.5}
         <div class="label">Tool</div>
         <div class="seg c3" id="toolSeg">
           <button class="btn" data-v="powder" aria-pressed="true">Powder</button>
-          <button class="btn" data-v="dot" aria-pressed="false">Dots</button>
           <button class="btn" data-v="petal" aria-pressed="false">Petals</button>
           <button class="btn" data-v="leaf" aria-pressed="false">Leaves</button>
           <button class="btn" data-v="flower" aria-pressed="false">Flowers</button>
@@ -334,7 +336,7 @@ li.off .lrow{opacity:.5}
   const sizeFor = kind => FIXED_SIZE[kind] || st.size;
   const okColor = (kind,hex) => kind==='petal' ? !GREENS.includes(hex) : kind==='leaf' ? GREENS.includes(hex) : true;
   const REPEATS = [1,2,4,5,6,7,8,10,12], TILES = [6,8,10,12];
-  const KIND = {powder:'Powder', dot:'Dots', petal:'Petals', leaf:'Ashoka leaf', flower:'Marigold', diya:'Diya'};
+  const KIND = {powder:'Powder', petal:'Petals', leaf:'Ashoka leaf', flower:'Marigold', diya:'Diya'};
   const colorName = h => (COLORS.find(c => c[1] === h) || ['Clay'])[0];
   const $ = id => document.getElementById(id);
 
@@ -405,10 +407,6 @@ li.off .lrow{opacity:.5}
       for (let k=1;k<=n;k++){ const t=k/n; stamp(ctx,sp,x0+(x1-x0)*t,y0+(y1-y0)*t,s,rnd); }
     }
   }
-  function drawDot(ctx,x,y,s,color,rnd){
-    ctx.fillStyle=color; ctx.beginPath(); ctx.arc(x,y,s*.38,0,TAU); ctx.fill();
-    const sp=spr(color); stamp(ctx,sp,x,y,s*.62,rnd); stamp(ctx,sp,x,y,s*.62,rnd);
-  }
   function drawPetal(ctx,x,y,a,s,color){
     const L=s*2.2, W=s*1.1;
     ctx.save(); ctx.translate(x,y); ctx.rotate(a);
@@ -473,8 +471,7 @@ li.off .lrow{opacity:.5}
     if (L.kind === 'powder'){ for (let i=0;i<L.pts.length;i++) powderStep(ctx,L,i); return; }
     const rnd = rng32(L.seed);
     L.items.forEach(it => copiesOf(L,it[0],it[1],it[2]).forEach(c => {
-      if (L.kind==='dot') drawDot(ctx,c[0],c[1],L.size,L.color,rnd);
-      else if (L.kind==='petal') drawPetal(ctx,c[0],c[1],c[2],L.size*it[3],L.color);
+      if (L.kind==='petal') drawPetal(ctx,c[0],c[1],c[2],L.size*it[3],L.color);
       else if (L.kind==='leaf') drawLeaf(ctx,c[0],c[1],c[2],L.size*it[3],L.color);
       else if (L.kind==='flower') drawFlower(ctx,c[0],c[1],c[2],L.size*it[3],L.variant);
       else drawDiya(ctx,c[0],c[1],c[2],L.size);
@@ -590,7 +587,7 @@ li.off .lrow{opacity:.5}
     if (tool==='diya') return diyaR(s)*1.7;
     if (tool==='leaf') return s*1.2;
     if (tool==='flower') return flowerR(s)*.9;
-    return tool==='petal' ? s*1.2 : tool==='dot' ? s*.5 : s*.9;
+    return tool==='petal' ? s*1.2 : s*.9;
   }
   function clampPt(frame, x, y, m){
     const cl = (v,a,b) => Math.max(a, Math.min(b, v));
@@ -611,7 +608,6 @@ li.off .lrow{opacity:.5}
       pushHistory(); L.pts=[toLocal(frame,x,y)]; layers.push(L); powderStep(art,L,0);
       active={L,frame}; lastPt=[x,y]; floorEl.setPointerCapture(e.pointerId); renderList(); return;
     }
-    if (st.tool==='dot') L.items=[[...toLocal(frame,x,y),0,1]];
     if (st.tool==='petal'){
       const n=3+((Math.random()*3)|0), spread=st.size*1.8; L.items=[];
       for (let i=0;i<n;i++){ const a=Math.random()*TAU, d=Math.random()*spread;
