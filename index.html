@@ -697,6 +697,20 @@ li.off .lrow{opacity:.5}
   const outward = (frame,x,y) => Math.atan2(y-C,x-C);
   const toCanvas = e => { const r=floorEl.getBoundingClientRect(); return [(e.clientX-r.left)*S/r.width, (e.clientY-r.top)*S/r.height]; };
   let active = null, lastPt = null;
+  /* petals, flowers and diyas always sit above powder and leaves */
+  const TOP = k => k==='petal' || k==='flower' || k==='diya';
+  function insertLayer(L){
+    const i = TOP(L.kind) ? -1 : layers.findIndex(l => TOP(l.kind));
+    if (i < 0){ layers.push(L); return true; }
+    layers.splice(i, 0, L); return false;
+  }
+  let liveRaf = 0;
+  function startLive(){
+    belowX.clearRect(0,0,S,S); aboveX.clearRect(0,0,S,S);
+    layers.forEach(l => renderLayer(TOP(l.kind) ? aboveX : belowX, l)); composeLive();
+  }
+  function composeLive(){ liveRaf=0; art.clearRect(0,0,S,S); art.drawImage(belowC,0,0); art.drawImage(aboveC,0,0); }
+  const scheduleLive = () => { if (!liveRaf) liveRaf = requestAnimationFrame(composeLive); };
   /* keep every mark on the floor: repeated strokes stay within the largest circle the floor holds so every copy lands on it */
   function margin(tool, frame, s){
     if (tool==='diya') return diyaR(s)*1.7;
@@ -720,8 +734,9 @@ li.off .lrow{opacity:.5}
     const L = newLayer(st.tool, frame);
 
     if (st.tool==='powder'){
-      pushHistory(); L.pts=[toLocal(frame,x,y)]; layers.push(L); powderStep(art,L,0);
-      active={L,frame}; lastPt=[x,y]; floorEl.setPointerCapture(e.pointerId); renderList(); return;
+      pushHistory(); L.pts=[toLocal(frame,x,y)];
+      const onTop = insertLayer(L); if (onTop) powderStep(art,L,0); else startLive();
+      active={L,frame,live:!onTop}; lastPt=[x,y]; floorEl.setPointerCapture(e.pointerId); renderList(); return;
     }
     if (st.tool==='petal'){
       pushHistory(); L.items=[]; layers.push(L);
@@ -741,8 +756,8 @@ li.off .lrow{opacity:.5}
         return;
       }
     }
-    pushHistory(); layers.push(L);
-    if ((st.tool==='petal'||st.tool==='leaf'||st.tool==='flower') && !reduced) dropLayer(L); else renderLayer(art,L);
+    pushHistory(); const onTop = insertLayer(L);
+    if ((st.tool==='petal'||st.tool==='leaf'||st.tool==='flower') && !reduced) dropLayer(L); else if (onTop) renderLayer(art,L); else renderAll();
     renderList();
     if (st.tool==='diya') toast(`${diyaCount(layers)} of ${MAX_DIYAS} diyas placed`);
   });
@@ -765,11 +780,11 @@ li.off .lrow{opacity:.5}
     }
     if (!active) return;
     const r0=toCanvas(e), [x,y]=clampPt(active.frame,r0[0],r0[1],margin('powder',active.frame,active.L.size)); if (Math.hypot(x-lastPt[0],y-lastPt[1])<2.5) return;
-    lastPt=[x,y]; active.L.pts.push(toLocal(active.frame,x,y)); powderStep(art,active.L,active.L.pts.length-1);
+    lastPt=[x,y]; active.L.pts.push(toLocal(active.frame,x,y)); if (active.live){ powderStep(belowX,active.L,active.L.pts.length-1); scheduleLive(); } else powderStep(art,active.L,active.L.pts.length-1);
   });
   const endStroke = () => {
     if (petalDrag){ const d=petalDrag; petalDrag=null; endPetals(d); return; }
-    if (active){ active=null; renderList(); }
+    if (active){ if (active.live){ cancelAnimationFrame(liveRaf); composeLive(); } active=null; renderList(); }
   };
   floorEl.addEventListener('pointerup', endStroke); floorEl.addEventListener('pointercancel', endStroke);
 
@@ -1111,6 +1126,7 @@ li.off .lrow{opacity:.5}
     toast('Copied and shifted half a step. Adjust Turn or Slide to vary it.');
   };
   const move = d => { const i=layers.findIndex(l=>l.id===selId), j=i+d; if (j<0||j>=layers.length) return;
+    if (TOP(layers[i].kind)!==TOP(layers[j].kind)){ toast('Petals, flowers and diyas always stay above powder and leaves.'); return; }
     pushHistory(); [layers[i],layers[j]]=[layers[j],layers[i]]; rebuildCaches(); composeSel(false); renderList(); renderEditor(); };
   $('edUp').onclick = () => move(1); $('edDown').onclick = () => move(-1);
 
@@ -1125,7 +1141,7 @@ li.off .lrow{opacity:.5}
     $('edFlowerGroup').hidden = L.kind!=='flower'; if (L.kind==='flower'){ $('edFlowerName').textContent=(FLOWERS[L.variant]||FLOWERS.yellow).full; refreshEdFl(); } $('edSizeGroup').hidden = !!FIXED_SIZE[L.kind]; refreshEdSw();
     $('edSize').value=L.size; $('edSizeOut').textContent=L.size;
     $('edOff').value=Math.round(L.off*100); $('edOffOut').textContent=`${Math.round(L.off*100)}%`;
-    const i=layers.findIndex(l=>l.id===L.id); $('edUp').disabled = i===layers.length-1; $('edDown').disabled = i===0;
+    const i=layers.findIndex(l=>l.id===L.id); $('edUp').disabled = i===layers.length-1 || TOP(layers[i+1].kind)!==TOP(L.kind); $('edDown').disabled = i===0 || TOP(layers[i-1].kind)!==TOP(L.kind);
     $('edOffGroup').hidden = L.zone!=='radial';
     $('edOffLabel').textContent = L.zone==='radial' ? 'Turn' : 'Slide';
     $('edRepGroup').hidden = L.zone!=='radial';
