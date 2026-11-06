@@ -70,6 +70,8 @@ h2 small{font-family:var(--body);font-size:13px;color:var(--muted)}
 .seg.c9{grid-template-columns:repeat(9,1fr)}
 .seg.c4{grid-template-columns:repeat(4,1fr)}
 .seg.c3{grid-template-columns:repeat(3,1fr)}
+.seg.c2{grid-template-columns:1fr 1fr}
+.floor.rm{cursor:pointer}
 #toolSeg{grid-template-columns:repeat(6,1fr)}
 #toolSeg .btn{grid-column:span 2}
 #toolSeg .btn:nth-child(n+4){grid-column:span 3}
@@ -335,6 +337,17 @@ li.off .lrow{opacity:.5}
         <div class="label"><span>Petal placement</span><button class="mini" id="petalFill" type="button" aria-pressed="true">Fill shapes</button></div>
         <p class="hint">Tap to scatter a few petals. Drag to lay a trail. With Fill shapes on, end your drag near where it began and the shape fills with petals.</p>
       </div>
+      <div class="group" id="diyaGroup" hidden>
+        <div class="label"><span>Diyas</span><b id="diyaCount">0 of 15 placed</b></div>
+        <div class="seg c2" id="diyaMode">
+          <button class="btn" type="button" data-v="place" aria-pressed="true">Place &amp; move</button>
+          <button class="btn" type="button" data-v="remove" aria-pressed="false">Remove</button>
+        </div>
+        <p class="hint" id="diyaHint">Tap the floor to place a diya. Drag a diya to move it.</p>
+        <button class="btn" id="diyaClear" type="button">Remove all diyas</button>
+        <div class="confirm" id="diyaConfirm" hidden><span id="diyaAsk"></span>
+          <button class="btn danger" id="diyaYes" type="button">Remove</button><button class="btn" id="diyaNo" type="button">Keep them</button></div>
+      </div>
       <div class="group" id="flowerGroup" hidden>
         <div class="label">Flower <b id="flowerName">Yellow marigold</b></div>
         <div class="flpick" id="flowerPick"></div>
@@ -451,7 +464,7 @@ li.off .lrow{opacity:.5}
   const belowC = off(), aboveC = off(), selC = off();
   const belowX = belowC.getContext('2d'), aboveX = aboveC.getContext('2d'), selX = selC.getContext('2d');
 
-  const st = { color2:null, tool:'powder', flower:'yellow', petalFill:true, color:'#f5c518', size:10, n:8, k:8, mirror:false, guides:true };
+  const st = { diyaMode:'place', color2:null, tool:'powder', flower:'yellow', petalFill:true, color:'#f5c518', size:10, n:8, k:8, mirror:false, guides:true };
   const flying = new WeakSet();
   let layers = [], hist = [], redoStack = [], selId = null, lit = false, nextId = 1;
   const counter = {}, pendingIds = new Set();
@@ -601,7 +614,14 @@ li.off .lrow{opacity:.5}
     fl.fillStyle=v; fl.fillRect(0,0,S,S);
   }
   function paintGuides(){
-    gd.clearRect(0,0,S,S); if (!st.guides || lit) return;
+    gd.clearRect(0,0,S,S); if (lit) return;
+    if (st.tool==='diya' && st.diyaMode==='remove'){
+      gd.save(); gd.setLineDash([6,5]); gd.lineWidth=3; gd.strokeStyle='rgba(255,92,70,.95)';
+      layers.forEach(L => { if (L.kind!=='diya' || !L.visible) return; const it=L.items[0], r=diyaR(L.size)*1.35;
+        gd.beginPath(); gd.arc(it[0],it[1],r,0,TAU); gd.stroke(); });
+      gd.restore();
+    }
+    if (!st.guides) return;
     gd.strokeStyle='rgba(255,240,220,.2)'; gd.lineWidth=1.4; gd.setLineDash([5,9]);
     const n=st.n*(st.mirror&&st.n>1?2:1);
     if (st.n>1) for (let k=0;k<n;k++){ const a=k*TAU/n-Math.PI/2; gd.beginPath(); gd.moveTo(C,C); gd.lineTo(C+Math.cos(a)*C*1.42,C+Math.sin(a)*C*1.42); gd.stroke(); }
@@ -696,7 +716,18 @@ li.off .lrow{opacity:.5}
   }
   const outward = (frame,x,y) => Math.atan2(y-C,x-C);
   const toCanvas = e => { const r=floorEl.getBoundingClientRect(); return [(e.clientX-r.left)*S/r.width, (e.clientY-r.top)*S/r.height]; };
-  let active = null, lastPt = null;
+  let active = null, lastPt = null, diyaDrag = null, diyaRaf = 0;
+  function hitDiya(x,y){
+    for (let i=layers.length-1;i>=0;i--){ const L=layers[i]; if (L.kind!=='diya' || !L.visible) continue;
+      const it=L.items[0]; if (Math.hypot(x-it[0], y-it[1]) < diyaR(L.size)*1.35) return L; }
+    return null;
+  }
+  function removeDiyas(ids){
+    if (!ids.length) return;
+    pushHistory(); layers=layers.filter(l => !ids.includes(l.id)); renderAll(); renderList();
+    const n=diyaCount(layers);
+    toast(ids.length>1 ? `All diyas removed` : `Diya removed. ${n} of ${MAX_DIYAS} placed`);
+  }
   /* petals, flowers and diyas always sit above powder and leaves */
   const TOP = k => k==='petal' || k==='flower' || k==='diya';
   function insertLayer(L){
@@ -729,6 +760,17 @@ li.off .lrow{opacity:.5}
     e.preventDefault();
     if (lit){ toast('Press Keep decorating to change the rangoli.'); return; }
     if (selId) deselect();
+    if (st.tool==='diya'){
+      const r0=toCanvas(e), hit=hitDiya(r0[0],r0[1]);
+      if (st.diyaMode==='remove'){
+        if (hit) removeDiyas([hit.id]); else toast('Tap a diya to remove it.');
+        return;
+      }
+      if (hit){
+        const it=hit.items[0]; diyaDrag={ id:hit.id, dx:it[0]-r0[0], dy:it[1]-r0[1], moved:false, sx:r0[0], sy:r0[1] };
+        floorEl.setPointerCapture(e.pointerId); return;
+      }
+    }
     const raw = toCanvas(e), frame = st.tool==='diya' ? { zone:'single' } : zoneAt(raw[0],raw[1]);
     const [x,y] = clampPt(frame, raw[0], raw[1], margin(st.tool, frame, sizeFor(st.tool)));
     const L = newLayer(st.tool, frame);
@@ -762,6 +804,16 @@ li.off .lrow{opacity:.5}
     if (st.tool==='diya') toast(`${diyaCount(layers)} of ${MAX_DIYAS} diyas placed`);
   });
   floorEl.addEventListener('pointermove', e => {
+    if (diyaDrag){
+      const d=diyaDrag, r0=toCanvas(e);
+      if (!d.moved){ if (Math.hypot(r0[0]-d.sx,r0[1]-d.sy)<5) return; d.moved=true; pushHistory();
+        belowX.clearRect(0,0,S,S); layers.forEach(l => { if (l.id!==d.id) renderLayer(belowX,l); }); }
+      const i=layers.findIndex(l=>l.id===d.id); if (i<0) return;
+      const L=layers[i], fr={zone:'single'}, [x,y]=clampPt(fr, r0[0]+d.dx, r0[1]+d.dy, margin('diya',fr,L.size));
+      layers[i]={...L, items:[[x,y,outward(fr,x,y),1]]};
+      if (!diyaRaf) diyaRaf=requestAnimationFrame(() => { diyaRaf=0; const cur=layers.find(l=>l.id===d.id); art.clearRect(0,0,S,S); art.drawImage(belowC,0,0); if (cur) renderLayer(art,cur); });
+      return;
+    }
     if (petalDrag){
       const d=petalDrag, r0=toCanvas(e), [x,y]=clampPt(d.frame,r0[0],r0[1],PETAL_M), [lx,ly]=d.last;
       const step=Math.hypot(x-lx,y-ly); if (step<2.5) return;
@@ -784,6 +836,9 @@ li.off .lrow{opacity:.5}
   });
   const endStroke = () => {
     if (petalDrag){ const d=petalDrag; petalDrag=null; endPetals(d); return; }
+    if (diyaDrag){ const d=diyaDrag; diyaDrag=null; cancelAnimationFrame(diyaRaf); diyaRaf=0;
+      if (d.moved){ renderAll(); renderList(); } else toast('Drag a diya to move it, or choose Remove to take it away.');
+      return; }
     if (active){ if (active.live){ cancelAnimationFrame(liveRaf); composeLive(); } active=null; renderList(); }
   };
   floorEl.addEventListener('pointerup', endStroke); floorEl.addEventListener('pointercancel', endStroke);
@@ -1029,13 +1084,17 @@ li.off .lrow{opacity:.5}
     st.tool=b.dataset.v; document.querySelectorAll('#toolSeg .btn').forEach(x=>x.setAttribute('aria-pressed',x===b));
     fixColors(st, st.tool);
     refreshSw(); $('sizeGroup').hidden = !!FIXED_SIZE[st.tool]; status();
-    $('colorGroup').hidden = st.tool==='flower' || st.tool==='diya'; $('flowerGroup').hidden = st.tool!=='flower'; $('petalGroup').hidden = st.tool!=='petal';
+    $('colorGroup').hidden = st.tool==='flower' || st.tool==='diya'; $('flowerGroup').hidden = st.tool!=='flower'; $('petalGroup').hidden = st.tool!=='petal'; $('diyaGroup').hidden = st.tool!=='diya'; $('diyaConfirm').hidden = true; floorEl.classList.toggle('rm', st.tool==='diya' && st.diyaMode==='remove'); paintGuides();
     if (st.tool==='diya') toast(`${diyaCount(layers)} of ${MAX_DIYAS} diyas placed. They stay unlit until you press Done.`);
   });
   const toggle = (id,key) => { const b=$(id); b.onclick=()=>{ st[key]=!st[key]; b.setAttribute('aria-pressed',st[key]); paintGuides(); status(); }; };
   toggle('guides','guides');
   $('size').oninput = e => { st.size=+e.target.value; $('sizeOut').textContent=st.size; };
-  function status(){ $('status').textContent = `Centre ×${st.n}${st.mirror?' mirrored':''} · Diyas ${diyaCount(layers)}/${MAX_DIYAS}`; if (typeof updateDock==='function') updateDock(); }
+  function status(){ const dn=diyaCount(layers);
+    $('status').textContent = `Centre ×${st.n}${st.mirror?' mirrored':''} · Diyas ${dn}/${MAX_DIYAS}`;
+    $('diyaCount').textContent = `${dn} of ${MAX_DIYAS} placed`; $('diyaClear').disabled = !layers.some(l=>l.kind==='diya');
+    if (st.tool==='diya' && st.diyaMode==='remove') paintGuides();
+    if (typeof updateDock==='function') updateDock(); }
 
   /* ---------- actions ---------- */
   $('undo').onclick = () => restore(hist, redoStack);
@@ -1222,6 +1281,16 @@ li.off .lrow{opacity:.5}
     }
   };
 
+  document.querySelectorAll('#diyaMode .btn').forEach(b => b.onclick = () => {
+    st.diyaMode=b.dataset.v; document.querySelectorAll('#diyaMode .btn').forEach(x => x.setAttribute('aria-pressed', x===b));
+    $('diyaHint').textContent = st.diyaMode==='remove' ? 'Tap a diya to remove it. Diyas you can remove have a red ring.' : 'Tap the floor to place a diya. Drag a diya to move it.';
+    floorEl.classList.toggle('rm', st.diyaMode==='remove'); paintGuides(); status();
+  });
+  $('diyaClear').onclick = () => { const n=layers.filter(l=>l.kind==='diya').length;
+    if (!n){ toast('There are no diyas to remove.'); return; }
+    $('diyaAsk').textContent = `Remove all ${n} diya${n===1?'':'s'}?`; $('diyaConfirm').hidden=false; $('diyaYes').focus(); };
+  $('diyaNo').onclick = () => { $('diyaConfirm').hidden=true; };
+  $('diyaYes').onclick = () => { $('diyaConfirm').hidden=true; removeDiyas(layers.filter(l=>l.kind==='diya').map(l=>l.id)); };
   $('petalFill').onclick = () => { st.petalFill=!st.petalFill; $('petalFill').setAttribute('aria-pressed', st.petalFill); };
 
   /* ---------- marigold pickers ---------- */
@@ -1252,7 +1321,7 @@ li.off .lrow{opacity:.5}
     $('dkIco').innerHTML = t==='flower' ? `<img src="${FLOWERS[st.flower].src}" alt="">` : TOOL_ICON[t];
     const chip=$('dkChip');
     if (t==='flower'){ chip.style.background=`center/cover url('${FLOWERS[st.flower].src}')`; $('dkColName').textContent=FLOWERS[st.flower].full; chip.hidden=false; }
-    else if (t==='diya'){ chip.hidden=true; $('dkColName').textContent=`${diyaCount(layers)} of ${MAX_DIYAS} placed`; }
+    else if (t==='diya'){ chip.hidden=true; $('dkColName').textContent=`${diyaCount(layers)} of ${MAX_DIYAS} placed${st.diyaMode==='remove'?' · Remove mode':''}`; }
     else { chip.hidden=false; chip.style.background = st.color2 ? `linear-gradient(135deg, ${st.color}, ${st.color2})` : st.color;
       $('dkColName').textContent = st.color2 ? `${colorName(st.color)} to ${colorName(st.color2)}` : colorName(st.color); }
     $('dkRep').textContent = t==='diya' ? '' : '×'+st.n;
