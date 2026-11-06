@@ -93,7 +93,21 @@ h2 small{font-family:var(--body);font-size:13px;color:var(--muted)}
 @media (min-width:760px){.tools,.layers{position:relative}.layers{align-self:start}}
 @media (max-width:420px){.seg .btn{font-size:12.5px;padding:9px 0}header p{font-size:13px}}
 
-.swatches{display:grid;grid-template-columns:repeat(10,1fr);gap:5px}
+.swatches{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.cmode{display:inline-flex;gap:4px}
+.gslots{display:flex;align-items:center;gap:8px}
+.slot{appearance:none;display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:999px;border:1px solid var(--line);
+  background:var(--tray-2);color:var(--ink);font:600 13px/1 var(--body);cursor:pointer}
+.slot i{width:22px;height:22px;border-radius:50%;box-shadow:inset 0 0 0 1px #0005}
+.slot[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.slot:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.gbar{flex:1;min-width:0;height:12px;border-radius:999px;box-shadow:inset 0 0 0 1px #0004}
+.sw.custom{position:relative;overflow:hidden;display:grid;place-items:center;
+  background:conic-gradient(#e53935,#fdd835,#43a047,#00acc1,#3949ab,#d81b60,#e53935)}
+.sw.custom input{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);opacity:0;cursor:pointer;border:0;padding:0}
+.sw.custom b{font:700 16px/1 var(--body);color:#fff;text-shadow:0 1px 3px #000a;pointer-events:none}
+.sw.custom.has b{display:none}
+.sw.custom:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
 .sw{appearance:none;border:2px solid transparent;border-radius:50%;aspect-ratio:1/1;width:100%;max-width:34px;justify-self:center;cursor:pointer;padding:0;
   background-image:radial-gradient(#ffffff26 1px,transparent 1.4px);background-size:4px 4px}
 .sw:disabled{opacity:.16;cursor:not-allowed}
@@ -250,10 +264,7 @@ li.off .lrow{opacity:.5}
           <button class="btn" data-v="diya" aria-pressed="false">Diya</button>
         </div>
       </div>
-      <div class="group" id="colorGroup">
-        <div class="label">Colour <b id="colorName"></b></div>
-        <div class="swatches" id="swatches"></div>
-      </div>
+      <div class="group" id="colorGroup"></div>
       <div class="group" id="petalGroup" hidden>
         <div class="label"><span>Petal placement</span><button class="mini" id="petalFill" type="button" aria-pressed="true">Fill shapes</button></div>
         <p class="hint">Tap to scatter a few petals. Drag to lay a trail. With Fill shapes on, end your drag near where it began and the shape fills with petals.</p>
@@ -286,10 +297,7 @@ li.off .lrow{opacity:.5}
           <div class="label">Marigold <b id="edFlowerName"></b></div>
           <div class="flpick" id="edFlowerPick"></div>
         </div>
-        <div class="group" id="edColorGroup">
-          <div class="label">Colour <b id="edColorName"></b></div>
-          <div class="swatches" id="edSwatches"></div>
-        </div>
+        <div class="group" id="edColorGroup"></div>
         <div class="group" id="edSizeGroup">
           <label class="label" for="edSize">Size <output id="edSizeOut"></output></label>
           <input type="range" id="edSize" min="4" max="24">
@@ -338,10 +346,23 @@ li.off .lrow{opacity:.5}
   Object.values(FLOWERS).forEach(f => { f.img = new Image(); f.img.onload = () => { if (layers.some(l => l.kind==='flower')) { if (selId){ rebuildCaches(); composeSel(false); } else renderAll(); } }; f.img.src = f.src; });
   const FIXED_SIZE = { petal:10, leaf:10, diya:10, flower:10 };
   const sizeFor = kind => FIXED_SIZE[kind] || st.size;
-  const okColor = (kind,hex) => kind==='petal' ? !GREENS.includes(hex) : kind==='leaf' ? GREENS.includes(hex) : true;
+  function hsl(hex){ const n=parseInt(hex.slice(1),16), r=(n>>16)/255, g=(n>>8&255)/255, b=(n&255)/255, mx=Math.max(r,g,b), mn=Math.min(r,g,b), l=(mx+mn)/2;
+    if (mx===mn) return [0,0,l]; const d=mx-mn, s2=l>.5?d/(2-mx-mn):d/(mx+mn);
+    const h=(mx===r ? (g-b)/d+(g<b?6:0) : mx===g ? (b-r)/d+2 : (r-g)/d+4)*60; return [h,s2,l]; }
+  const isGreen = hex => { const [h,s2,l]=hsl(hex); return h>=70 && h<=170 && s2>=.15 && l>.06 && l<.94; };
+  const okColor = (kind,hex) => !hex || (kind==='petal' ? !isGreen(hex) : kind==='leaf' ? isGreen(hex) : true);
+  const badColorMsg = kind => kind==='leaf' ? 'Leaves come only in greens' : 'Petals come in any colour except green';
+  const mixHex = (a,b,t) => { const x=parseInt(a.slice(1),16), y=parseInt(b.slice(1),16), f=sh=>Math.round(((x>>sh)&255)*(1-t)+((y>>sh)&255)*t);
+    return '#'+((1<<24)|(f(16)<<16)|(f(8)<<8)|f(0)).toString(16).slice(1); };
+  const GRAD_SPAN = 240;
+  const pong = d => { const u=(d/GRAD_SPAN)%2; return u<=1 ? u : 2-u; };
+  const colAt = (L,t) => L.color2 ? mixHex(L.color, L.color2, Math.round(t*16)/16) : L.color;
+  const cumCache = new WeakMap();
+  function cumAt(P,i){ let c=cumCache.get(P); if (!c){ c=[0]; cumCache.set(P,c); }
+    while (c.length<=i){ const k=c.length; c.push(c.at(k-1)+Math.hypot(P[k][0]-P[k-1][0],P[k][1]-P[k-1][1])); } return c.at(i); }
   const REPEATS = [1,2,4,5,6,7,8,10,12], TILES = [6,8,10,12];
   const KIND = {powder:'Powder', petal:'Petals', leaf:'Ashoka leaf', flower:'Marigold', diya:'Diya'};
-  const colorName = h => (COLORS.find(c => c[1] === h) || ['Clay'])[0];
+  const colorName = h => (COLORS.find(c => c[1] === h) || ['Custom'])[0];
   const $ = id => document.getElementById(id);
 
   const floorEl = $('floor');
@@ -351,7 +372,7 @@ li.off .lrow{opacity:.5}
   const belowC = off(), aboveC = off(), selC = off();
   const belowX = belowC.getContext('2d'), aboveX = aboveC.getContext('2d'), selX = selC.getContext('2d');
 
-  const st = { tool:'powder', flower:'yellow', petalFill:true, color:'#f5c518', size:10, n:8, k:8, mirror:false, guides:true };
+  const st = { color2:null, tool:'powder', flower:'yellow', petalFill:true, color:'#f5c518', size:10, n:8, k:8, mirror:false, guides:true };
   const flying = new WeakSet();
   let layers = [], hist = [], redoStack = [], selId = null, lit = false, nextId = 1;
   const counter = {}, pendingIds = new Set();
@@ -403,13 +424,14 @@ li.off .lrow{opacity:.5}
 
   /* ---------- drawing primitives ---------- */
   function powderStep(ctx, L, i){
-    const P=L.pts, s=L.size, sp=spr(L.color), rnd=rng32(L.seed*7919+i);
+    const P=L.pts, s=L.size, grad=!!L.color2, rnd=rng32(L.seed*7919+i);
+    const d1 = grad ? cumAt(P,i) : 0, sp = spr(grad ? colAt(L,pong(d1)) : L.color);
     const cur = copiesOf(L, P[i][0], P[i][1], 0);
     if (i === 0){ for (const c of cur) for (let k=0;k<3;k++) stamp(ctx,sp,c[0],c[1],s,rnd); return; }
-    const prev = copiesOf(L, P[i-1][0], P[i-1][1], 0), step = Math.max(1.4, s*.28);
+    const prev = copiesOf(L, P[i-1][0], P[i-1][1], 0), step = Math.max(1.4, s*.28), d0 = grad ? cumAt(P,i-1) : 0;
     for (let c=0;c<cur.length;c++){
       const [x0,y0]=prev[c], [x1,y1]=cur[c], n=Math.max(1,Math.ceil(Math.hypot(x1-x0,y1-y0)/step));
-      for (let k=1;k<=n;k++){ const t=k/n; stamp(ctx,sp,x0+(x1-x0)*t,y0+(y1-y0)*t,s,rnd); }
+      for (let k=1;k<=n;k++){ const t=k/n; stamp(ctx, grad ? spr(colAt(L,pong(d0+(d1-d0)*t))) : sp, x0+(x1-x0)*t,y0+(y1-y0)*t,s,rnd); }
     }
   }
   function drawPetal(ctx,x,y,a,s,color){
@@ -425,7 +447,7 @@ li.off .lrow{opacity:.5}
     ctx.beginPath(); ctx.moveTo(-L*.4,0); ctx.lineTo(L*.28,0); ctx.stroke();
     ctx.restore();
   }
-  function drawLeaf(ctx,x,y,a,s,color){
+  function drawLeaf(ctx,x,y,a,s,color,color2){
     const Lf=s*5.4, w=s*.95, x0=s*.55, N=30, top=[], bot=[];
     for (let i=0;i<=N;i++){ const t=i/N;
       const wf = w*Math.sin(Math.PI*Math.pow(t,.72))*(1-.35*t)*(1+.09*Math.sin(t*Math.PI*11));
@@ -434,10 +456,17 @@ li.off .lrow{opacity:.5}
     ctx.strokeStyle=shade(color,-15); ctx.lineWidth=s*.22; ctx.lineCap='round';
     ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(x0+2,0); ctx.stroke();
     const p=new Path2D(); p.moveTo(x0,0); top.forEach(q=>p.lineTo(q[0],q[1])); for (let i=bot.length-1;i>=0;i--) p.lineTo(bot[i][0],bot[i][1]); p.closePath();
-    const g=ctx.createLinearGradient(0,-w,0,w);
-    g.addColorStop(0,shade(color,30)); g.addColorStop(.5,color); g.addColorStop(1,shade(color,-28));
-    ctx.fillStyle=g; ctx.fill(p);
-    ctx.strokeStyle=shade(color,80); ctx.globalAlpha*=.75; ctx.lineWidth=s*.11;
+    if (color2){
+      const g=ctx.createLinearGradient(x0,0,x0+Lf,0); g.addColorStop(0,color); g.addColorStop(1,color2);
+      ctx.fillStyle=g; ctx.fill(p);
+      const v=ctx.createLinearGradient(0,-w,0,w); v.addColorStop(0,'rgba(255,255,255,.2)'); v.addColorStop(.5,'rgba(255,255,255,0)'); v.addColorStop(1,'rgba(0,0,0,.22)');
+      ctx.fillStyle=v; ctx.fill(p);
+    } else {
+      const g=ctx.createLinearGradient(0,-w,0,w);
+      g.addColorStop(0,shade(color,30)); g.addColorStop(.5,color); g.addColorStop(1,shade(color,-28));
+      ctx.fillStyle=g; ctx.fill(p);
+    }
+    ctx.strokeStyle=shade(color2 ? mixHex(color,color2,.5) : color,80); ctx.globalAlpha*=.75; ctx.lineWidth=s*.11;
     ctx.beginPath(); ctx.moveTo(x0,0); ctx.lineTo(x0+Lf*.97,0); ctx.stroke();
     ctx.lineWidth=s*.06; ctx.globalAlpha*=.6;
     for (let i=1;i<8;i++){ const t=i/8, xx=x0+t*Lf, wf=w*Math.sin(Math.PI*Math.pow(t,.72))*(1-.35*t);
@@ -476,8 +505,8 @@ li.off .lrow{opacity:.5}
     if (L.kind === 'powder'){ for (let i=0;i<L.pts.length;i++) powderStep(ctx,L,i); return; }
     const rnd = rng32(L.seed);
     L.items.forEach(it => !flying.has(it) && copiesOf(L,it[0],it[1],it[2]).forEach(c => {
-      if (L.kind==='petal') drawPetal(ctx,c[0],c[1],c[2],L.size*it[3],L.color);
-      else if (L.kind==='leaf') drawLeaf(ctx,c[0],c[1],c[2],L.size*it[3],L.color);
+      if (L.kind==='petal') drawPetal(ctx,c[0],c[1],c[2],L.size*it[3],colAt(L,it[4]||0));
+      else if (L.kind==='leaf') drawLeaf(ctx,c[0],c[1],c[2],L.size*it[3],L.color,L.color2);
       else if (L.kind==='flower') drawFlower(ctx,c[0],c[1],c[2],L.size*it[3],L.variant);
       else drawDiya(ctx,c[0],c[1],c[2],L.size);
     }));
@@ -542,7 +571,7 @@ li.off .lrow{opacity:.5}
       fx.beginPath(); fx.ellipse(f.x,f.y,sr,sr*(heavy?.85:.58),0,0,TAU); fx.fill(); fx.restore(); }
       fx.save(); fx.globalAlpha=Math.min(1,p*4);
       if (heavy) drawFlower(fx,f.x+sway,f.y-h,f.a+q*f.spin*.35,f.s*sc,f.variant);
-      else if (f.kind==='leaf') drawLeaf(fx,f.x+sway,f.y-h,f.a+q*f.spin,f.s*sc,f.color);
+      else if (f.kind==='leaf') drawLeaf(fx,f.x+sway,f.y-h,f.a+q*f.spin,f.s*sc,f.color,f.color2);
       else drawPetal(fx,f.x+sway,f.y-h,f.a+q*f.spin,f.s*sc,f.color);
       fx.restore(); return true;
     });
@@ -582,7 +611,7 @@ li.off .lrow{opacity:.5}
   /* ---------- input ---------- */
   function newLayer(kind, frame){
     counter[kind]=(counter[kind]||0)+1;
-    return { id:nextId++, kind, num:counter[kind], zone:frame.zone, color: kind==='diya' ? '#b4592c' : st.color, size:sizeFor(kind),
+    return { id:nextId++, kind, num:counter[kind], zone:frame.zone, color: kind==='diya' ? '#b4592c' : st.color, color2: (kind==='powder'||kind==='petal'||kind==='leaf') ? st.color2 : null, size:sizeFor(kind),
       n:st.n, k:st.k, mirror:st.mirror, off:0, seed:(Math.random()*1e9)|0, visible:true,
       ...(kind==='flower' ? { variant:st.flower, color:FLOWERS[st.flower].color } : {}) };
   }
@@ -650,7 +679,7 @@ li.off .lrow{opacity:.5}
       while (d.acc>=TRAIL_GAP){
         d.acc-=TRAIL_GAP; const t=1-d.acc/step, px=lx+(x-lx)*t, py=ly+(y-ly)*t, j=(Math.random()-.5)*5;
         const [qx,qy]=clampPt(d.frame, px-Math.sin(dir)*j, py+Math.cos(dir)*j, PETAL_M);
-        out.push([qx,qy, dir+(Math.random()-.5)*.7+(Math.random()<.5?0:Math.PI), .82+Math.random()*.3]);
+        out.push([qx,qy, dir+(Math.random()-.5)*.7+(Math.random()<.5?0:Math.PI), .82+Math.random()*.3, pong(d.len-d.acc)]);
       }
       if (out.length) dropPetals(d.L, out, () => 0, false);
       return;
@@ -674,7 +703,7 @@ li.off .lrow{opacity:.5}
       const n=3+((Math.random()*3)|0), spread=18, items=[];
       for (let i=0;i<n;i++){ const a=Math.random()*TAU, r=Math.random()*spread;
         const [px,py]=clampPt(d.frame,x+Math.cos(a)*r,y+Math.sin(a)*r,PETAL_M);
-        items.push([px,py,Math.random()*TAU,.8+Math.random()*.35]); }
+        items.push([px,py,Math.random()*TAU,.8+Math.random()*.35,Math.random()]); }
       dropPetals(L, items, i => i*80, false); renderList(); return;
     }
     const [ex,ey]=d.pts.at(-1), poly=d.pts, area=Math.abs(polyArea(poly));
@@ -703,6 +732,7 @@ li.off .lrow{opacity:.5}
     if (!items.length) return;
     const cx=items.reduce((t,i)=>t+i[0],0)/items.length, cy=items.reduce((t,i)=>t+i[1],0)/items.length;
     const far=Math.max(1,...items.map(i=>Math.hypot(i[0]-cx,i[1]-cy)));
+    items.forEach(i => { i[4]=Math.min(1,Math.hypot(i[0]-cx,i[1]-cy)/far); });
     dropPetals(L, items, i => Math.hypot(items.at(i)[0]-cx, items.at(i)[1]-cy)/far*650 + Math.random()*90, true);
   }
   /* each petal lands on the floor as it finishes falling, so a trail grows while you drag */
@@ -717,7 +747,7 @@ li.off .lrow{opacity:.5}
     items.forEach(it => flying.add(it));
     const now=performance.now();
     items.forEach((it,ii) => { const cps=copiesOf(cur,it[0],it[1],it[2]); const t=now+delayOf(ii);
-      cps.forEach((c,ci) => falling.push({ id:L.id, bake:it, kind:'petal', color:L.color, x:c[0], y:c[1], a:c[2], s:L.size*it[3],
+      cps.forEach((c,ci) => falling.push({ id:L.id, bake:it, kind:'petal', color:colAt(cur,it[4]||0), x:c[0], y:c[1], a:c[2], s:L.size*it[3],
         t0:t+Math.min(ci*(light?5:14),light?120:400), dur:light?380+Math.random()*160:560+Math.random()*220, light,
         spin:(Math.random()-.5)*(light?2:4), sway:Math.random()<.5?-1:1 })); });
     kick();
@@ -726,7 +756,7 @@ li.off .lrow{opacity:.5}
     flying.delete(f.bake);
     const cur=layers.find(l=>l.id===f.id && l.items.includes(f.bake)); if (!cur){ bakeDirty=true; return; }
     if (cur.visible && layers.at(-1)===cur && !selId){
-      art.save(); drawPetal(art,f.x,f.y,f.a,f.s,cur.color); art.restore();
+      art.save(); drawPetal(art,f.x,f.y,f.a,f.s,colAt(cur,f.bake[4]||0)); art.restore();
     } else bakeDirty=true;
   }
   let bakeDirty=false;
@@ -734,7 +764,7 @@ li.off .lrow{opacity:.5}
   function dropLayer(L){
     pendingIds.add(L.id); const now=performance.now();
     L.items.forEach((it,ii) => copiesOf(L,it[0],it[1],it[2]).forEach((c,ci) => falling.push({
-      id:L.id, kind:L.kind, color:L.color, variant:L.variant, x:c[0], y:c[1], a:c[2], s:L.size*it[3],
+      id:L.id, kind:L.kind, color:L.color, color2:L.color2, variant:L.variant, x:c[0], y:c[1], a:c[2], s:L.size*it[3],
       t0: now+ii*80+Math.min(ci*16,500), dur:650+Math.random()*250, spin:(Math.random()-.5)*4, sway:Math.random()<.5?-1:1 })));
     kick();
   }
@@ -756,13 +786,70 @@ li.off .lrow{opacity:.5}
       b.onclick=()=>pick(v); el.appendChild(b); });
     return () => el.querySelectorAll('.btn').forEach(b => b.setAttribute('aria-pressed', +b.dataset.v===get()));
   }
-  const refreshSw = buildSwatches($('swatches'), ()=>st.color, hex => { st.color=hex; refreshSw(); $('colorName').textContent=colorName(hex); }, ()=>st.tool);
+  /* colour picker: preset swatches + your own colour, solid or a two-colour gradient (slots A and B) */
+  function colorPicker(root, o){
+    let slot='a', gesture=false, warned=false;
+    root.innerHTML = `<div class="label"><span>Colour <b class="cname"></b></span><span class="cmode" role="group" aria-label="Colour style">
+        <button type="button" class="mini" data-m="solid">Solid</button><button type="button" class="mini" data-m="grad">Gradient</button></span></div>
+      <div class="gslots" hidden><button type="button" class="slot" data-s="a"><i></i>From</button><span class="gbar"></span><button type="button" class="slot" data-s="b"><i></i>To</button></div>
+      <div class="swatches"></div>`;
+    const q = sel => root.querySelector(sel), sw = q('.swatches');
+    COLORS.forEach(([name,hex]) => { const b=document.createElement('button'); b.className='sw'; b.type='button'; b.title=name;
+      b.style.backgroundColor=hex; b.setAttribute('aria-label',name); b.dataset.hex=hex; b.onclick=()=>apply(hex,true); sw.appendChild(b); });
+    const cs=document.createElement('span'); cs.className='sw custom'; cs.title='Your own colour';
+    cs.innerHTML='<input type="color" aria-label="Mix your own colour" value="#f5c518"><b aria-hidden="true">+</b>'; sw.appendChild(cs);
+    const inp=cs.querySelector('input');
+    inp.addEventListener('input', () => apply(inp.value,false));
+    inp.addEventListener('change', () => { gesture=false; warned=false; refresh(); });
+    function apply(hex, oneShot){
+      const k=o.kind();
+      if (!okColor(k,hex)){ if (!warned){ toast(badColorMsg(k)+'.'); warned=true; } if (oneShot) warned=false; return; }
+      if (oneShot || !gesture){ o.begin(); gesture=!oneShot; }
+      o.set(slot==='b' ? {color2:hex} : {color:hex}); refresh();
+    }
+    root.querySelectorAll('.cmode .mini').forEach(b => b.onclick = () => {
+      const cur=o.get(), k=o.kind();
+      if (b.dataset.m==='solid'){ if (!cur.color2) return; o.begin(); o.set({color2:null}); slot='a'; }
+      else { if (cur.color2) return;
+        const order=['#f5c518','#d62a1e','#e8417f','#2c4fc4','#f28c13','#0f9aa6','#f4ece0','#3aa64a','#1d5a2c','#6b8a2a'];
+        const pick=order.find(h => h!==cur.color && okColor(k,h)) || cur.color;
+        o.begin(); o.set({color2:pick}); slot='b'; }
+      refresh();
+    });
+    root.querySelectorAll('.slot').forEach(b => b.onclick = () => { slot=b.dataset.s; refresh(); });
+    function refresh(){
+      const {color,color2}=o.get(), k=o.kind(); if (!color) return;
+      if (!color2) slot='a';
+      const active = slot==='b' && color2 ? color2 : color;
+      q('.cname').textContent = color2 ? `${colorName(color)} to ${colorName(color2)}` : colorName(color);
+      root.querySelectorAll('.cmode .mini').forEach(b => b.setAttribute('aria-pressed', (b.dataset.m==='grad') === !!color2));
+      q('.gslots').hidden = !color2;
+      if (color2){
+        root.querySelectorAll('.slot').forEach(b => { b.setAttribute('aria-pressed', b.dataset.s===slot); b.querySelector('i').style.background = b.dataset.s==='b' ? color2 : color; });
+        q('.gbar').style.background = `linear-gradient(90deg, ${color}, ${color2})`;
+      }
+      sw.querySelectorAll('.sw[data-hex]').forEach(b => { const ok=okColor(k,b.dataset.hex); b.disabled=!ok;
+        b.setAttribute('aria-pressed', b.dataset.hex===active); b.title = ok ? b.getAttribute('aria-label') : badColorMsg(k); });
+      const custom = !COLORS.some(c => c[1]===active);
+      cs.classList.toggle('has', custom); cs.setAttribute('aria-pressed', custom);
+      cs.style.background = custom ? `radial-gradient(circle, ${active} 0 58%, transparent 60%), conic-gradient(#e53935,#fdd835,#43a047,#00acc1,#3949ab,#d81b60,#e53935)` : '';
+      cs.style.borderColor = custom ? 'var(--ink)' : ''; cs.style.boxShadow = custom ? '0 0 0 2px var(--tray),0 0 0 4px var(--accent)' : '';
+      if (!gesture) inp.value = active;
+    }
+    return { refresh, reset(){ slot='a'; gesture=false; refresh(); } };
+  }
+  function fixColors(obj, kind){
+    if (!okColor(kind, obj.color)) obj.color = kind==='leaf' ? '#1d5a2c' : '#f28c13';
+    if (obj.color2 && !okColor(kind, obj.color2)) obj.color2 = kind==='leaf' ? (obj.color==='#3aa64a' ? '#6b8a2a' : '#3aa64a') : (obj.color==='#f5c518' ? '#d62a1e' : '#f5c518');
+  }
+  const trayPick = colorPicker($('colorGroup'), { kind:()=>st.tool, get:()=>({color:st.color, color2:st.color2}), set:p=>Object.assign(st,p), begin(){} });
+  const refreshSw = () => trayPick.refresh();
   const refreshRep = buildSeg($('repSeg'), REPEATS, ()=>st.n, v => { st.n=v; refreshRep(); paintGuides(); status(); });
-  refreshSw(); refreshRep(); $('colorName').textContent=colorName(st.color);
+  refreshSw(); refreshRep();
 
   document.querySelectorAll('#toolSeg .btn').forEach(b => b.onclick = () => {
     st.tool=b.dataset.v; document.querySelectorAll('#toolSeg .btn').forEach(x=>x.setAttribute('aria-pressed',x===b));
-    if (!okColor(st.tool, st.color)){ st.color = st.tool==='leaf' ? '#1d5a2c' : '#f28c13'; $('colorName').textContent=colorName(st.color); }
+    fixColors(st, st.tool);
     refreshSw(); $('sizeGroup').hidden = !!FIXED_SIZE[st.tool];
     $('colorGroup').hidden = st.tool==='flower' || st.tool==='diya'; $('flowerGroup').hidden = st.tool!=='flower'; $('petalGroup').hidden = st.tool!=='petal';
     if (st.tool==='diya') toast(`${diyaCount(layers)} of ${MAX_DIYAS} diyas placed. They stay unlit until you press Done.`);
@@ -806,7 +893,7 @@ li.off .lrow{opacity:.5}
     [...layers].reverse().forEach(L => {
       const li=document.createElement('li'); if (!L.visible) li.className='off';
       const row=document.createElement('button'); row.className='lrow'; row.type='button'; row.setAttribute('aria-pressed', L.id===selId);
-      const chip = L.kind==='flower' ? `<i class="chip img" style="background-image:url('${(FLOWERS[L.variant]||FLOWERS.yellow).src}')"></i>` : `<i class="chip" style="background:${L.color}"></i>`;
+      const chip = L.kind==='flower' ? `<i class="chip img" style="background-image:url('${(FLOWERS[L.variant]||FLOWERS.yellow).src}')"></i>` : `<i class="chip" style="background:${L.color2 ? `linear-gradient(135deg, ${L.color}, ${L.color2})` : L.color}"></i>`;
       row.innerHTML=`${chip}<span class="lname">${KIND[L.kind]} ${L.num}</span><span class="lmeta">${zoneLabel(L.zone)} ×${copyCount(L)}</span>`;
       row.onclick=()=> L.id===selId ? deselect() : select(L.id);
       const eye=document.createElement('button'); eye.className='eye'; eye.type='button';
@@ -825,7 +912,7 @@ li.off .lrow{opacity:.5}
   const selLayer = () => layers.find(l=>l.id===selId);
   function select(id){
     selId=id; rebuildCaches(); composeSel(true); setTimeout(()=>{ if (selId===id) composeSel(false); }, 650);
-    renderList(); renderEditor();
+    renderList(); renderEditor(); edPick.reset();
   }
   function deselect(){ if (!selId) return; selId=null; renderAll(); renderList(); renderEditor(); }
   function setProp(prop, val, record){
@@ -840,7 +927,15 @@ li.off .lrow{opacity:.5}
   $('edSize').addEventListener('input', sliderEdit('size', v=>v));
   $('edOff').addEventListener('input', sliderEdit('off', v=>v/100));
   ['edSize','edOff'].forEach(id => $(id).addEventListener('change', () => sliderGesture=false));
-  const refreshEdSw = buildSwatches($('edSwatches'), ()=>selLayer()?.color, hex => setProp('color',hex,true), ()=>selLayer()?.kind);
+  function setProps(patch, record){
+    const i=layers.findIndex(l=>l.id===selId); if (i<0) return;
+    if (record) pushHistory();
+    layers[i]={...layers[i], ...patch}; scheduleSel(); renderEditor(true);
+  }
+  const edPick = colorPicker($('edColorGroup'), { kind:()=>selLayer()?.kind,
+    get:()=>{ const L=selLayer(); return L ? {color:L.color, color2:L.color2||null} : {}; },
+    set:p=>setProps(p,false), begin:()=>pushHistory() });
+  const refreshEdSw = () => edPick.refresh();
   $('edClose').onclick = deselect;
   $('toolsLock').onclick = deselect;
   $('edDel').onclick = () => { pushHistory(); layers=layers.filter(l=>l.id!==selId); selId=null; renderAll(); renderList(); renderEditor(); };
@@ -864,7 +959,7 @@ li.off .lrow{opacity:.5}
     if (!L) return;
     $('edTitle').textContent = `${KIND[L.kind]} ${L.num} · ${zoneLabel(L.zone)}`;
     $('edColorGroup').hidden = L.kind==='diya' || L.kind==='flower';
-    $('edFlowerGroup').hidden = L.kind!=='flower'; if (L.kind==='flower'){ $('edFlowerName').textContent=(FLOWERS[L.variant]||FLOWERS.yellow).name; refreshEdFl(); } $('edSizeGroup').hidden = !!FIXED_SIZE[L.kind]; $('edColorName').textContent=colorName(L.color); refreshEdSw();
+    $('edFlowerGroup').hidden = L.kind!=='flower'; if (L.kind==='flower'){ $('edFlowerName').textContent=(FLOWERS[L.variant]||FLOWERS.yellow).name; refreshEdFl(); } $('edSizeGroup').hidden = !!FIXED_SIZE[L.kind]; refreshEdSw();
     $('edSize').value=L.size; $('edSizeOut').textContent=L.size;
     $('edOff').value=Math.round(L.off*100); $('edOffOut').textContent=`${Math.round(L.off*100)}%`;
     const i=layers.findIndex(l=>l.id===L.id); $('edUp').disabled = i===layers.length-1; $('edDown').disabled = i===0;
