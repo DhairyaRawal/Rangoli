@@ -552,7 +552,7 @@ li.off .lrow{opacity:.5}
       ctx.beginPath(); ctx.moveTo(xx,0); ctx.lineTo(xx+Lf*.07,-wf*.78); ctx.moveTo(xx,0); ctx.lineTo(xx+Lf*.07,wf*.74); ctx.stroke(); }
     ctx.restore();
   }
-  const diyaR = s => 24*Math.max(.7, Math.min(1.6, s/10));
+  const diyaR = s => 25.2*Math.max(.7, Math.min(1.6, s/10));
   function drawDiya(ctx,x,y,a,s){
     const r=diyaR(s), sc=r/24;
     const body=k=>{ const p=new Path2D(), rr=r*k; p.moveTo(rr*1.62,0); p.arc(0,0,rr,.62,TAU-.62); p.closePath(); return p; };
