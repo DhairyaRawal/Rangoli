@@ -150,8 +150,10 @@ li.off .lrow{opacity:.5}
   .actions{display:grid;gap:12px;justify-content:stretch}
   .minor{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
   .minor .btn{padding:9px 4px;font-size:13.5px}
-  .major{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:10px}
-  .major .btn{min-height:54px;font:400 19px/1 var(--display);border-radius:10px}
+  .major{display:flex;gap:10px}
+  .major .btn{flex:1 1 auto;min-width:0;min-height:54px;font:400 clamp(17px,4.9vw,19px)/1.1 var(--display);border-radius:10px;
+    white-space:normal;overflow:visible;text-overflow:clip;padding-inline:14px}
+  .major .btn.keep{min-width:max-content}
   .major .btn.primary{box-shadow:0 6px 22px rgba(242,165,22,.35)}
   .major .btn.keep{box-shadow:none}
 }
