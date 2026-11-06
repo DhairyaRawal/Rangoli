@@ -71,6 +71,11 @@ h2 small{font-family:var(--body);font-size:13px;color:var(--muted)}
 .seg.c4{grid-template-columns:repeat(4,1fr)}
 .seg.c3{grid-template-columns:repeat(3,1fr)}
 .seg.c2{grid-template-columns:1fr 1fr}
+.dmode{display:grid;grid-template-columns:1fr 44px;gap:6px}
+.dmode .btn{min-height:40px}
+.dm-rm{display:grid;place-items:center;padding:0}
+.dm-rm svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.dmode .dm-rm[aria-pressed="true"]{background:var(--danger);border-color:#c0503d;color:#fff}
 .floor.rm{cursor:pointer}
 #toolSeg{grid-template-columns:repeat(6,1fr)}
 #toolSeg .btn{grid-column:span 2}
@@ -339,9 +344,9 @@ li.off .lrow{opacity:.5}
       </div>
       <div class="group" id="diyaGroup" hidden>
         <div class="label"><span>Diyas</span><b id="diyaCount">0 of 15 placed</b></div>
-        <div class="seg c2" id="diyaMode">
+        <div class="dmode" id="diyaMode">
           <button class="btn" type="button" data-v="place" aria-pressed="true">Place &amp; move</button>
-          <button class="btn" type="button" data-v="remove" aria-pressed="false">Remove</button>
+          <button class="btn dm-rm" type="button" data-v="remove" aria-pressed="false" aria-label="Remove diyas" title="Remove diyas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12.5a1.5 1.5 0 0 0 1.5 1.5h7a1.5 1.5 0 0 0 1.5-1.5L18 7"/><path d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"/></svg></button>
         </div>
         <p class="hint" id="diyaHint">Tap the floor to place a diya. Drag a diya to move it.</p>
         <button class="btn" id="diyaClear" type="button">Remove all diyas</button>
