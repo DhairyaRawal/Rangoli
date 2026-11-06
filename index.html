@@ -102,6 +102,7 @@ h2 small{font-family:var(--body);font-size:13px;color:var(--muted)}
 .slot[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .slot:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .gbar{flex:1;min-width:0;height:12px;border-radius:999px;box-shadow:inset 0 0 0 1px #0004}
+.label.yours{margin-top:2px}
 .sw.custom{position:relative;overflow:hidden;display:grid;place-items:center;
   background:conic-gradient(#e53935,#fdd835,#43a047,#00acc1,#3949ab,#d81b60,#e53935)}
 .sw.custom input{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);opacity:0;cursor:pointer;border:0;padding:0}
@@ -362,7 +363,7 @@ li.off .lrow{opacity:.5}
     while (c.length<=i){ const k=c.length; c.push(c.at(k-1)+Math.hypot(P[k][0]-P[k-1][0],P[k][1]-P[k-1][1])); } return c.at(i); }
   const REPEATS = [1,2,4,5,6,7,8,10,12], TILES = [6,8,10,12];
   const KIND = {powder:'Powder', petal:'Petals', leaf:'Ashoka leaf', flower:'Marigold', diya:'Diya'};
-  const colorName = h => (COLORS.find(c => c[1] === h) || ['Custom'])[0];
+  const colorName = h => (COLORS.find(c => c[1] === h) || ['Your colour'])[0];
   const $ = id => document.getElementById(id);
 
   const floorEl = $('floor');
@@ -787,8 +788,19 @@ li.off .lrow{opacity:.5}
     return () => el.querySelectorAll('.btn').forEach(b => b.setAttribute('aria-pressed', +b.dataset.v===get()));
   }
   /* colour picker: preset swatches + your own colour, solid or a two-colour gradient (slots A and B) */
+  const SAVED_KEY='reminiscing-rangoli.colours', MAX_SAVED=6, pickers=[];
+  let savedColors=[];
+  try { const v=JSON.parse(localStorage.getItem(SAVED_KEY)||'[]'); if (Array.isArray(v)) savedColors=v.filter(h=>/^#[0-9a-f]{6}$/i.test(h)).slice(0,MAX_SAVED); } catch(e){}
+  function saveColor(hex){
+    hex=hex.toLowerCase(); if (COLORS.some(c=>c[1]===hex)) return;
+    const had=savedColors.includes(hex);
+    savedColors=[hex, ...savedColors.filter(h=>h!==hex)].slice(0,MAX_SAVED);
+    try { localStorage.setItem(SAVED_KEY, JSON.stringify(savedColors)); } catch(e){}
+    pickers.forEach(pk => pk.refresh());
+    if (!had) toast('Colour saved to Your colours');
+  }
   function colorPicker(root, o){
-    let slot='a', gesture=false, warned=false;
+    let slot='a', gesture=false, warned=false, savedShown='';
     root.innerHTML = `<div class="label"><span>Colour <b class="cname"></b></span><span class="cmode" role="group" aria-label="Colour style">
         <button type="button" class="mini" data-m="solid">Solid</button><button type="button" class="mini" data-m="grad">Gradient</button></span></div>
       <div class="gslots" hidden><button type="button" class="slot" data-s="a"><i></i>From</button><span class="gbar"></span><button type="button" class="slot" data-s="b"><i></i>To</button></div>
@@ -796,11 +808,26 @@ li.off .lrow{opacity:.5}
     const q = sel => root.querySelector(sel), sw = q('.swatches');
     COLORS.forEach(([name,hex]) => { const b=document.createElement('button'); b.className='sw'; b.type='button'; b.title=name;
       b.style.backgroundColor=hex; b.setAttribute('aria-label',name); b.dataset.hex=hex; b.onclick=()=>apply(hex,true); sw.appendChild(b); });
-    const cs=document.createElement('span'); cs.className='sw custom'; cs.title='Your own colour';
+    const yl=document.createElement('div'); yl.className='label yours'; yl.innerHTML='<span>Your colours</span>'; yl.hidden=true;
+    const ys=document.createElement('div'); ys.className='swatches'; ys.hidden=true;
+    root.append(yl, ys);
+    const cs=document.createElement('span'); cs.className='sw custom'; cs.title='Mix your own colour';
     cs.innerHTML='<input type="color" aria-label="Mix your own colour" value="#f5c518"><b aria-hidden="true">+</b>'; sw.appendChild(cs);
     const inp=cs.querySelector('input');
     inp.addEventListener('input', () => apply(inp.value,false));
-    inp.addEventListener('change', () => { gesture=false; warned=false; refresh(); });
+    inp.addEventListener('change', () => {
+      const cur=o.get(), applied=(slot==='b' ? cur.color2 : cur.color)||'';
+      gesture=false; warned=false;
+      if (applied.toLowerCase()===inp.value.toLowerCase()) saveColor(inp.value); else refresh();
+    });
+    function buildSaved(){
+      const key=savedColors.join(); if (key===savedShown) return; savedShown=key;
+      ys.innerHTML='';
+      savedColors.forEach((hex,i) => { const b=document.createElement('button'); b.className='sw'; b.type='button';
+        b.style.backgroundColor=hex; b.setAttribute('aria-label',`Your colour ${i+1}`); b.dataset.hex=hex; b.dataset.mine='1';
+        b.onclick=()=>apply(hex,true); ys.appendChild(b); });
+      yl.hidden = ys.hidden = !savedColors.length;
+    }
     function apply(hex, oneShot){
       const k=o.kind();
       if (!okColor(k,hex)){ if (!warned){ toast(badColorMsg(k)+'.'); warned=true; } if (oneShot) warned=false; return; }
@@ -828,15 +855,17 @@ li.off .lrow{opacity:.5}
         root.querySelectorAll('.slot').forEach(b => { b.setAttribute('aria-pressed', b.dataset.s===slot); b.querySelector('i').style.background = b.dataset.s==='b' ? color2 : color; });
         q('.gbar').style.background = `linear-gradient(90deg, ${color}, ${color2})`;
       }
-      sw.querySelectorAll('.sw[data-hex]').forEach(b => { const ok=okColor(k,b.dataset.hex); b.disabled=!ok;
-        b.setAttribute('aria-pressed', b.dataset.hex===active); b.title = ok ? b.getAttribute('aria-label') : badColorMsg(k); });
-      const custom = !COLORS.some(c => c[1]===active);
+      buildSaved();
+      root.querySelectorAll('.sw[data-hex]').forEach(b => { const ok=okColor(k,b.dataset.hex); b.disabled=!ok;
+        b.setAttribute('aria-pressed', b.dataset.hex===active); b.title = ok ? (b.dataset.mine ? 'Your colour' : b.getAttribute('aria-label')) : badColorMsg(k); });
+      const custom = !COLORS.some(c => c[1]===active) && !savedColors.includes(active.toLowerCase());
       cs.classList.toggle('has', custom); cs.setAttribute('aria-pressed', custom);
       cs.style.background = custom ? `radial-gradient(circle, ${active} 0 58%, transparent 60%), conic-gradient(#e53935,#fdd835,#43a047,#00acc1,#3949ab,#d81b60,#e53935)` : '';
       cs.style.borderColor = custom ? 'var(--ink)' : ''; cs.style.boxShadow = custom ? '0 0 0 2px var(--tray),0 0 0 4px var(--accent)' : '';
       if (!gesture) inp.value = active;
     }
-    return { refresh, reset(){ slot='a'; gesture=false; refresh(); } };
+    const api = { refresh, reset(){ slot='a'; gesture=false; refresh(); } };
+    pickers.push(api); return api;
   }
   function fixColors(obj, kind){
     if (!okColor(kind, obj.color)) obj.color = kind==='leaf' ? '#1d5a2c' : '#f28c13';
