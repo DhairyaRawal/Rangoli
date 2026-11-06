@@ -457,7 +457,7 @@ li.off .lrow{opacity:.5}
     ctx.beginPath(); ctx.moveTo(r*.05,0); ctx.lineTo(r*1.2,0); ctx.stroke();
     ctx.restore();
   }
-  const flowerR = s => 3.3*s;
+  const flowerR = s => 3.036*s;
   function drawFlower(ctx,x,y,a,s,variant){
     const f = FLOWERS[variant] || FLOWERS.yellow, r = flowerR(s);
     if (!f.img.complete || !f.img.naturalWidth) return;
