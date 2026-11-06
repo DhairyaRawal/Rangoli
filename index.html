@@ -105,10 +105,26 @@ h2 small{font-family:var(--body);font-size:13px;color:var(--muted)}
 .label.yours{margin-top:2px}
 .sw.custom{position:relative;overflow:hidden;display:grid;place-items:center;
   background:conic-gradient(#e53935,#fdd835,#43a047,#00acc1,#3949ab,#d81b60,#e53935)}
-.sw.custom input{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);opacity:0;cursor:pointer;border:0;padding:0}
 .sw.custom b{font:700 16px/1 var(--body);color:#fff;text-shadow:0 1px 3px #000a;pointer-events:none}
 .sw.custom.has b{display:none}
-.sw.custom:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.sw.custom:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cpop{position:fixed;z-index:45;width:min(272px, calc(100vw - 24px));background:var(--tray);border:1px solid var(--line);border-radius:12px;padding:12px;
+  display:grid;gap:12px;box-shadow:0 18px 50px #000b;touch-action:none}
+.cpsv{position:relative;height:168px;border-radius:8px;cursor:crosshair;outline:none;
+  background-image:linear-gradient(to top,#000,rgba(0,0,0,0)),linear-gradient(to right,#fff,rgba(255,255,255,0))}
+.cphue{position:relative;height:16px;border-radius:999px;cursor:pointer;outline:none;
+  background:linear-gradient(to right,#f00,#ff0 17%,#0f0 33%,#0ff 50%,#00f 67%,#f0f 83%,#f00)}
+.cpsv:focus-visible,.cphue:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+.cpknob{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #0008,0 2px 6px #0008;pointer-events:none}
+.cphue .cpknob{top:50%}
+.cprow{display:flex;align-items:center;gap:8px}
+.cpprev{width:34px;height:34px;flex:none;border-radius:8px;box-shadow:inset 0 0 0 1px #0006}
+.cphex{flex:1;min-width:0;display:flex;align-items:center;gap:6px;background:var(--tray-2);border:1px solid var(--line);border-radius:6px;padding:0 8px;height:34px}
+.cphex span{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.cphex input{flex:1;min-width:0;width:100%;background:transparent;border:0;color:var(--ink);font:600 15px/1 var(--body);font-variant-numeric:tabular-nums;text-transform:uppercase;outline:none}
+.cphex:focus-within{border-color:var(--accent)}
+.cprow .btn{padding:10px 14px}
+.cpwarn{margin:0;font-size:13px;color:#ffb3a1}
 .sw{appearance:none;border:2px solid transparent;border-radius:50%;aspect-ratio:1/1;width:100%;max-width:34px;justify-self:center;cursor:pointer;padding:0;
   background-image:radial-gradient(#ffffff26 1px,transparent 1.4px);background-size:4px 4px}
 .sw:disabled{opacity:.16;cursor:not-allowed}
@@ -322,6 +338,16 @@ li.off .lrow{opacity:.5}
   </div>
 </div>
 
+<div class="cpop" id="cpop" role="dialog" aria-modal="false" aria-label="Mix your own colour" hidden>
+  <div class="cpsv" id="cpSV" role="slider" tabindex="0" aria-label="Shade and brightness"><i class="cpknob" id="cpSVk"></i></div>
+  <div class="cphue" id="cpHue" role="slider" tabindex="0" aria-label="Hue" aria-valuemin="0" aria-valuemax="360"><i class="cpknob" id="cpHk"></i></div>
+  <div class="cprow">
+    <span class="cpprev" id="cpPrev" aria-hidden="true"></span>
+    <label class="cphex"><span>Hex</span><input id="cpHex" maxlength="7" spellcheck="false" autocomplete="off" inputmode="text"></label>
+    <button class="btn primary" id="cpDone" type="button">Done</button>
+  </div>
+  <p class="cpwarn" id="cpWarn" hidden></p>
+</div>
 <div class="modal" id="exModal" role="dialog" aria-modal="true" aria-labelledby="exTitle" hidden>
   <div class="sheet">
     <h2 id="exTitle">Happy Diwali!</h2>
@@ -789,6 +815,61 @@ li.off .lrow{opacity:.5}
     return () => el.querySelectorAll('.btn').forEach(b => b.setAttribute('aria-pressed', +b.dataset.v===get()));
   }
   /* colour picker: preset swatches + your own colour, solid or a two-colour gradient (slots A and B) */
+  /* one in-game colour picker (same on phone and PC): shade square, hue slider, hex box */
+  const cpop = (() => {
+    const el=$('cpop'), sv=$('cpSV'), svk=$('cpSVk'), hue=$('cpHue'), hk=$('cpHk'), hexIn=$('cpHex'), prev=$('cpPrev'), warn=$('cpWarn');
+    let h=0, sa=1, v=1, ctx=null, anchor=null;
+    const toHex = (H,S,V) => { const f=n=>{ const k=(n+H/60)%6; return Math.round(255*(V-V*S*Math.max(0,Math.min(k,4-k,1)))); };
+      return '#'+((1<<24)|(f(5)<<16)|(f(3)<<8)|f(1)).toString(16).slice(1); };
+    const fromHex = hex => { const n=parseInt(hex.slice(1),16), r=(n>>16)/255, g=(n>>8&255)/255, b=(n&255)/255, mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn;
+      let H=0; if (d){ H = mx===r ? ((g-b)/d)%6 : mx===g ? (b-r)/d+2 : (r-g)/d+4; H*=60; if (H<0) H+=360; }
+      return [H, mx ? d/mx : 0, mx]; };
+    function paint(fromText){
+      const hex=toHex(h,sa,v);
+      sv.style.backgroundColor=toHex(h,1,1);
+      svk.style.left=(sa*100)+'%'; svk.style.top=((1-v)*100)+'%'; svk.style.background=hex;
+      hk.style.left=(h/360*100)+'%'; hk.style.background=toHex(h,1,1);
+      hue.setAttribute('aria-valuenow', Math.round(h)); sv.setAttribute('aria-valuetext', hex.toUpperCase());
+      prev.style.background=hex; if (!fromText) hexIn.value=hex.toUpperCase();
+      const msg=ctx ? ctx.input(hex) : ''; warn.textContent=msg; warn.hidden=!msg;
+    }
+    function drag(target, onMove){
+      target.addEventListener('pointerdown', e => { e.preventDefault(); target.setPointerCapture(e.pointerId); target.focus({preventScroll:true}); onMove(e);
+        const mv=ev=>onMove(ev), up=()=>{ target.removeEventListener('pointermove',mv); target.removeEventListener('pointerup',up); target.removeEventListener('pointercancel',up); };
+        target.addEventListener('pointermove',mv); target.addEventListener('pointerup',up); target.addEventListener('pointercancel',up); });
+    }
+    const clamp01 = x => Math.max(0, Math.min(1, x));
+    drag(sv, e => { const r=sv.getBoundingClientRect(); sa=clamp01((e.clientX-r.left)/r.width); v=1-clamp01((e.clientY-r.top)/r.height); paint(); });
+    drag(hue, e => { const r=hue.getBoundingClientRect(); h=clamp01((e.clientX-r.left)/r.width)*359.9; paint(); });
+    sv.addEventListener('keydown', e => { const st2=e.shiftKey?.1:.02, m={ArrowLeft:[-st2,0],ArrowRight:[st2,0],ArrowUp:[0,st2],ArrowDown:[0,-st2]}[e.key];
+      if (!m) return; e.preventDefault(); sa=clamp01(sa+m[0]); v=clamp01(v+m[1]); paint(); });
+    hue.addEventListener('keydown', e => { const d={ArrowLeft:-4,ArrowRight:4}[e.key]*(e.shiftKey?5:1); if (!d) return; e.preventDefault(); h=(h+d+360)%360; paint(); });
+    hexIn.addEventListener('input', () => { let t=hexIn.value.trim(); if (t[0]!=='#') t='#'+t;
+      if (/^#[0-9a-f]{6}$/i.test(t)){ [h,sa,v]=fromHex(t.toLowerCase()); paint(true); }
+      else if (/^#[0-9a-f]{3}$/i.test(t)){ [h,sa,v]=fromHex('#'+[...t.slice(1)].map(c=>c+c).join('').toLowerCase()); paint(true); } });
+    hexIn.addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); close(); } });
+    function place(){
+      if (!anchor || el.hidden) return;
+      const a=anchor.getBoundingClientRect(), w=el.offsetWidth, ht=el.offsetHeight, vw=innerWidth, vh=innerHeight, gap=10;
+      let left=Math.min(Math.max(12, a.left+a.width/2-w/2), vw-w-12);
+      let top = a.bottom+gap+ht <= vh-12 ? a.bottom+gap : Math.max(12, a.top-gap-ht);
+      el.style.left=left+'px'; el.style.top=top+'px';
+    }
+    function open(c){
+      if (!el.hidden && anchor===c.anchor){ close(); return; }
+      if (ctx) close();
+      ctx=c; anchor=c.anchor; [h,sa,v]=fromHex(c.start.toLowerCase());
+      el.hidden=false; const saved=ctx; ctx=null; paint(); ctx=saved; warn.hidden=true; place();
+      setTimeout(() => sv.focus({preventScroll:true}), 0);
+    }
+    function close(){ if (el.hidden) return; el.hidden=true; const c=ctx; ctx=null; const a=anchor; anchor=null; if (c) c.done(); if (a) a.focus({preventScroll:true}); }
+    $('cpDone').onclick = close;
+    document.addEventListener('pointerdown', e => { if (!el.hidden && !el.contains(e.target) && e.target!==anchor) close(); }, true);
+    document.addEventListener('keydown', e => { if (e.key==='Escape' && !el.hidden){ e.stopPropagation(); close(); } }, true);
+    addEventListener('resize', place); addEventListener('scroll', place, true);
+    return { open, close };
+  })();
+
   const SAVED_KEY='reminiscing-rangoli.colours', MAX_SAVED=6, pickers=[];
   let savedColors=[];
   try { const v=JSON.parse(localStorage.getItem(SAVED_KEY)||'[]'); if (Array.isArray(v)) savedColors=v.filter(h=>/^#[0-9a-f]{6}$/i.test(h)).slice(0,MAX_SAVED); } catch(e){}
@@ -812,15 +893,17 @@ li.off .lrow{opacity:.5}
     const yl=document.createElement('div'); yl.className='label yours'; yl.innerHTML='<span>Your colours</span>'; yl.hidden=true;
     const ys=document.createElement('div'); ys.className='swatches'; ys.hidden=true;
     root.append(yl, ys);
-    const cs=document.createElement('span'); cs.className='sw custom'; cs.title='Mix your own colour';
-    cs.innerHTML='<input type="color" aria-label="Mix your own colour" value="#f5c518"><b aria-hidden="true">+</b>'; sw.appendChild(cs);
-    const inp=cs.querySelector('input');
-    inp.addEventListener('input', () => apply(inp.value,false));
-    inp.addEventListener('change', () => {
-      const cur=o.get(), applied=(slot==='b' ? cur.color2 : cur.color)||'';
-      gesture=false; warned=false;
-      if (applied.toLowerCase()===inp.value.toLowerCase()) saveColor(inp.value); else refresh();
-    });
+    const cs=document.createElement('button'); cs.type='button'; cs.className='sw custom'; cs.title='Mix your own colour';
+    cs.setAttribute('aria-label','Mix your own colour'); cs.setAttribute('aria-haspopup','dialog');
+    cs.innerHTML='<b aria-hidden="true">+</b>'; sw.appendChild(cs);
+    cs.onclick = () => {
+      const cur=o.get(), start=(slot==='b' ? cur.color2 : cur.color) || '#f5c518';
+      let last=null;
+      cpop.open({ anchor:cs, start,
+        input: hex => { const ok=apply(hex,false,true); if (ok) last=hex; return ok ? '' : badColorMsg(o.kind())+'.'; },
+        done: () => { gesture=false; const now=o.get(), applied=((slot==='b' ? now.color2 : now.color)||'').toLowerCase();
+          if (last && applied===last.toLowerCase()) saveColor(last); else refresh(); } });
+    };
     function buildSaved(){
       const key=savedColors.join(); if (key===savedShown) return; savedShown=key;
       ys.innerHTML='';
@@ -829,11 +912,11 @@ li.off .lrow{opacity:.5}
         b.onclick=()=>apply(hex,true); ys.appendChild(b); });
       yl.hidden = ys.hidden = !savedColors.length;
     }
-    function apply(hex, oneShot){
+    function apply(hex, oneShot, quiet){
       const k=o.kind();
-      if (!okColor(k,hex)){ if (!warned){ toast(badColorMsg(k)+'.'); warned=true; } if (oneShot) warned=false; return; }
+      if (!okColor(k,hex)){ if (!quiet) toast(badColorMsg(k)+'.'); return false; }
       if (oneShot || !gesture){ o.begin(); gesture=!oneShot; }
-      o.set(slot==='b' ? {color2:hex} : {color:hex}); refresh();
+      o.set(slot==='b' ? {color2:hex} : {color:hex}); refresh(); return true;
     }
     root.querySelectorAll('.cmode .mini').forEach(b => b.onclick = () => {
       const cur=o.get(), k=o.kind();
@@ -863,7 +946,6 @@ li.off .lrow{opacity:.5}
       cs.classList.toggle('has', custom); cs.setAttribute('aria-pressed', custom);
       cs.style.background = custom ? `radial-gradient(circle, ${active} 0 58%, transparent 60%), conic-gradient(#e53935,#fdd835,#43a047,#00acc1,#3949ab,#d81b60,#e53935)` : '';
       cs.style.borderColor = custom ? 'var(--ink)' : ''; cs.style.boxShadow = custom ? '0 0 0 2px var(--tray),0 0 0 4px var(--accent)' : '';
-      if (!gesture) inp.value = active;
     }
     const api = { refresh, reset(){ slot='a'; gesture=false; refresh(); } };
     pickers.push(api); return api;
