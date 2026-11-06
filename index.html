@@ -133,13 +133,24 @@ li.off .lrow{opacity:.5}
 .lock span{font-size:14px;color:var(--ink);max-width:24ch;margin-inline:auto}
 .lock:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
 .minor,.major{display:contents}
+.floorbar{display:flex;align-items:center;gap:6px;width:100%;max-width:min(100%, 620px, max(300px, calc(100dvh - 260px)));margin-inline:auto}
+.fspacer{flex:1}
+.ibtn{appearance:none;display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 12px 0 10px;border-radius:8px;border:1px solid var(--line);
+  background:var(--tray-2);color:var(--ink);font:600 13.5px/1 var(--body);cursor:pointer;transition:background .15s,opacity .15s}
+.ibtn svg{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.ibtn:hover:not(:disabled){background:var(--line)}
+.ibtn:disabled{opacity:.38;cursor:default}
+.ibtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ibtn.sweep:hover:not(:disabled){background:#5a2a20;border-color:#9b3122}
+.confirm{width:100%;max-width:min(100%, 620px, max(300px, calc(100dvh - 260px)));margin-inline:auto;background:var(--tray-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+@media (max-width:420px){.ibtn span{display:none}.ibtn{width:44px;height:44px;padding:0;justify-content:center}.ibtn svg{width:22px;height:22px}}
 .btn.keep{background:transparent;color:var(--accent);border:2px solid var(--accent)}
 .btn.keep:hover{background:rgba(242,165,22,.12)}
 @media (max-width:759px){
   .actions{display:grid;gap:12px;justify-content:stretch}
   .minor{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
   .minor .btn{padding:9px 4px;font-size:13.5px}
-  .major{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:10px;padding-top:12px;border-top:1px dashed var(--line)}
+  .major{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:10px}
   .major .btn{min-height:54px;font:400 19px/1 var(--display);border-radius:10px}
   .major .btn.primary{box-shadow:0 6px 22px rgba(242,165,22,.35)}
   .major .btn.keep{box-shadow:none}
@@ -185,6 +196,17 @@ li.off .lrow{opacity:.5}
 
   <div class="app">
     <section class="floorbox">
+      <div class="floorbar" role="toolbar" aria-label="Floor actions">
+        <button class="ibtn" id="undo" type="button" aria-label="Undo" title="Undo" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span>Undo</span></button>
+        <button class="ibtn" id="redo" type="button" aria-label="Redo" title="Redo" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg><span>Redo</span></button>
+        <span class="fspacer"></span>
+        <button class="ibtn sweep" id="clear" type="button" aria-label="Sweep floor" title="Sweep floor"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 3.5l-7 7"/><path d="M12.5 10.5l2 2-5.2 7.5H4.2l-.2-.2 1.7-6.6z"/><path d="M8 15.5l-1.5 4.5M10.5 15.7L9 20"/></svg><span>Sweep</span></button>
+      </div>
+      <div class="confirm" id="confirm" hidden>
+        Sweep the whole floor clean?
+        <button class="btn danger" id="yes">Sweep</button>
+        <button class="btn" id="no">Keep it</button>
+      </div>
       <div class="floor" id="floor">
         <canvas id="cFloor"></canvas>
         <canvas id="cArt" aria-label="Rangoli floor"></canvas>
@@ -194,20 +216,10 @@ li.off .lrow{opacity:.5}
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
       </div>
       <div class="actions">
-        <div class="minor">
-          <button class="btn" id="undo" disabled>Undo</button>
-          <button class="btn" id="redo" disabled>Redo</button>
-          <button class="btn" id="clear">Sweep</button>
-        </div>
         <div class="major">
           <button class="btn primary" id="done">Done</button>
           <button class="btn primary" id="export" hidden>Export</button>
         </div>
-      </div>
-      <div class="confirm" id="confirm" hidden>
-        Sweep the whole floor clean?
-        <button class="btn danger" id="yes">Sweep</button>
-        <button class="btn" id="no">Keep it</button>
       </div>
       <p class="status" id="status"></p>
     </section>
@@ -471,7 +483,7 @@ li.off .lrow{opacity:.5}
   /* ---------- history ---------- */
   function pushHistory(){ hist.push(layers.map(l=>({...l}))); if (hist.length>80) hist.shift(); redoStack.length=0; updateButtons(); }
   function restore(from, to){ if (!from.length) return; to.push(layers.map(l=>({...l}))); layers = from.pop(); selId=null; renderAll(); renderList(); renderEditor(); updateButtons(); }
-  function updateButtons(){ $('undo').disabled=!hist.length; $('redo').disabled=!redoStack.length; }
+  function updateButtons(){ $('undo').disabled=lit||!hist.length; $('redo').disabled=lit||!redoStack.length; $('clear').disabled=lit; }
 
   /* ---------- toast ---------- */
   let toastT;
@@ -643,6 +655,7 @@ li.off .lrow{opacity:.5}
     lit=!lit; $('done').textContent = lit ? 'Keep decorating' : 'Done';
     $('done').classList.toggle('primary', !lit); $('done').classList.toggle('keep', lit); floorEl.classList.toggle('lit', lit); paintGuides();
     $('note').hidden = !lit;
+    ['undo','redo','clear'].forEach(id => $(id).classList.toggle('lockedLit', lit)); updateButtons();
     $('export').hidden = !lit;
     if (lit){ const d=diyaCount(layers); toast(d ? `${d} diya${d>1?'s':''} lit` : 'Rangoli finished. Add diyas to light them next time.');
       setTimeout(() => { if (lit) openExport(); }, 700); }
@@ -650,7 +663,7 @@ li.off .lrow{opacity:.5}
     kick();
   };
   document.addEventListener('keydown', e => {
-    if (!(e.ctrlKey||e.metaKey) || e.key.toLowerCase()!=='z') return;
+    if (lit || !(e.ctrlKey||e.metaKey) || e.key.toLowerCase()!=='z') return;
     e.preventDefault(); e.shiftKey ? restore(redoStack,hist) : restore(hist,redoStack);
   });
 
