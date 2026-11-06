@@ -223,7 +223,48 @@ li.off .lrow{opacity:.5}
   .scrim{position:fixed;inset:0;z-index:29;background:rgba(12,4,2,.5)}
   .scrim.light{background:transparent;pointer-events:none}
 }
-@media (prefers-reduced-motion:reduce){.toast{transition:none}.layers{transition:none}}
+.dock,.trayhead{display:none}
+@media (max-width:759px){
+  .actions,.status{display:none}
+  /* Done joins Undo / Redo / Sweep above the floor */
+  .floorbar .fspacer{order:5}
+  .floorbar .major{order:6;display:flex;gap:6px}
+  .floorbar .major .btn{flex:none;min-height:44px;padding:0 18px;font:400 17px/1 var(--display);border-radius:10px;white-space:nowrap}
+  .floorbar .major .btn.primary{box-shadow:0 4px 16px rgba(242,165,22,.4)}
+  .floorbar .major .btn.keep{box-shadow:none}
+  .floorbar.lit .ibtn,.floorbar.lit .fspacer{display:none}
+  .floorbar.lit .major{flex:1}
+  .floorbar.lit .major .btn{flex:1 1 auto;padding:0 12px}
+  .floorbar.lit .major .btn.keep{min-width:max-content}
+  /* summary dock under the floor */
+  .dock{display:flex;align-items:center;gap:10px;width:100%;max-width:min(100%, 620px, max(300px, calc(100dvh - 260px)));margin-inline:auto;
+    min-height:56px;padding:6px 6px 6px 8px;border-radius:12px;border:1px solid var(--line);background:var(--tray);color:var(--ink);
+    font:600 14px/1.15 var(--body);text-align:left;cursor:pointer}
+  .dock:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .dk-ico{width:40px;height:40px;flex:none;display:grid;place-items:center;border-radius:10px;background:var(--accent);color:#2a1612}
+  .dk-ico svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .dk-ico img{width:32px;height:32px}
+  .dk-main{flex:1;min-width:0;display:grid;gap:3px}
+  .dk-main b{font-size:15px}
+  .dk-col{display:flex;align-items:center;gap:6px;min-width:0;color:var(--muted);font-weight:600;font-size:13px}
+  .dk-col span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dk-chip{width:16px;height:16px;flex:none;border-radius:50%;box-shadow:inset 0 0 0 1px #0006;background-size:cover;background-position:center}
+  .dk-rep{flex:none;color:var(--ink);font-variant-numeric:tabular-nums;font-size:14px;padding:0 2px}
+  .dk-open{flex:none;display:flex;align-items:center;gap:4px;height:40px;padding:0 10px 0 12px;border-radius:8px;background:var(--tray-2);border:1px solid var(--line);font-size:13.5px}
+  .dk-open svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+  .dock[aria-expanded="true"] .dk-open svg{transform:rotate(180deg)}
+  /* tools tray: slides up from the bottom */
+  .tools{position:fixed;z-index:32;left:0;right:0;bottom:0;max-height:min(80dvh, 680px);overflow-y:auto;overscroll-behavior:contain;
+    border-radius:14px 14px 0 0;border-bottom:0;padding:0 max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    transform:translateY(105%);visibility:hidden;transition:transform .25s ease,visibility 0s .25s;box-shadow:0 -12px 40px #0009}
+  .tools.open{transform:none;visibility:visible;transition:transform .25s ease}
+  .trayhead{display:grid;grid-template-columns:36px 1fr 36px;align-items:center;position:sticky;top:0;z-index:3;background:var(--tray);padding:14px 0 6px;margin-bottom:-4px}
+  .trayhead h2{grid-column:2;justify-self:center;font-size:19px}
+  .trayhead .closeBtn{grid-column:3}
+  .grab{position:absolute;top:6px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:999px;background:var(--line)}
+  #trayScrim{z-index:31}
+}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}.layers{transition:none}.tools{transition:none}}
 </style>
 </head>
 <body>
@@ -241,7 +282,7 @@ li.off .lrow{opacity:.5}
 
   <div class="app">
     <section class="floorbox">
-      <div class="floorbar" role="toolbar" aria-label="Floor actions">
+      <div class="floorbar" id="floorbar" role="toolbar" aria-label="Floor actions">
         <button class="ibtn" id="undo" type="button" aria-label="Undo" title="Undo" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span>Undo</span></button>
         <button class="ibtn" id="redo" type="button" aria-label="Redo" title="Redo" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg><span>Redo</span></button>
         <span class="fspacer"></span>
@@ -260,8 +301,14 @@ li.off .lrow{opacity:.5}
         <div class="note" id="note" hidden><b>Happy Diwali</b><span>May your home glow with light, colour and joy</span></div>
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
       </div>
-      <div class="actions">
-        <div class="major">
+      <button class="dock" id="dock" type="button" aria-controls="toolsPanel" aria-expanded="false" aria-label="Open tools">
+        <span class="dk-ico" id="dkIco" aria-hidden="true"></span>
+        <span class="dk-main"><b id="dkTool">Powder</b><span class="dk-col"><i class="dk-chip" id="dkChip"></i><span id="dkColName"></span></span></span>
+        <span class="dk-rep" id="dkRep"></span>
+        <span class="dk-open">Tools<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></span>
+      </button>
+      <div class="actions" id="actions">
+        <div class="major" id="major">
           <button class="btn primary" id="done">Done</button>
           <button class="btn primary" id="export" hidden>Export</button>
         </div>
@@ -269,7 +316,9 @@ li.off .lrow{opacity:.5}
       <p class="status" id="status"></p>
     </section>
 
+    <div class="scrim" id="trayScrim" hidden></div>
     <aside class="tools panel" aria-label="Tools" id="toolsPanel">
+      <div class="trayhead"><span class="grab" aria-hidden="true"></span><h2>Tools</h2><button class="closeBtn" id="trayClose" type="button" aria-label="Close tools">&times;</button></div>
       <div class="tbody" id="toolsBody">
       <div class="group">
         <div class="label">Tool</div>
@@ -954,7 +1003,7 @@ li.off .lrow{opacity:.5}
     if (!okColor(kind, obj.color)) obj.color = kind==='leaf' ? '#1d5a2c' : '#f28c13';
     if (obj.color2 && !okColor(kind, obj.color2)) obj.color2 = kind==='leaf' ? (obj.color==='#3aa64a' ? '#6b8a2a' : '#3aa64a') : (obj.color==='#f5c518' ? '#d62a1e' : '#f5c518');
   }
-  const trayPick = colorPicker($('colorGroup'), { kind:()=>st.tool, get:()=>({color:st.color, color2:st.color2}), set:p=>Object.assign(st,p), begin(){} });
+  const trayPick = colorPicker($('colorGroup'), { kind:()=>st.tool, get:()=>({color:st.color, color2:st.color2}), set:p=>{ Object.assign(st,p); status(); }, begin(){} });
   const refreshSw = () => trayPick.refresh();
   const refreshRep = buildSeg($('repSeg'), REPEATS, ()=>st.n, v => { st.n=v; refreshRep(); paintGuides(); status(); });
   refreshSw(); refreshRep();
@@ -962,14 +1011,14 @@ li.off .lrow{opacity:.5}
   document.querySelectorAll('#toolSeg .btn').forEach(b => b.onclick = () => {
     st.tool=b.dataset.v; document.querySelectorAll('#toolSeg .btn').forEach(x=>x.setAttribute('aria-pressed',x===b));
     fixColors(st, st.tool);
-    refreshSw(); $('sizeGroup').hidden = !!FIXED_SIZE[st.tool];
+    refreshSw(); $('sizeGroup').hidden = !!FIXED_SIZE[st.tool]; status();
     $('colorGroup').hidden = st.tool==='flower' || st.tool==='diya'; $('flowerGroup').hidden = st.tool!=='flower'; $('petalGroup').hidden = st.tool!=='petal';
     if (st.tool==='diya') toast(`${diyaCount(layers)} of ${MAX_DIYAS} diyas placed. They stay unlit until you press Done.`);
   });
   const toggle = (id,key) => { const b=$(id); b.onclick=()=>{ st[key]=!st[key]; b.setAttribute('aria-pressed',st[key]); paintGuides(); status(); }; };
   toggle('guides','guides');
   $('size').oninput = e => { st.size=+e.target.value; $('sizeOut').textContent=st.size; };
-  function status(){ $('status').textContent = `Centre ×${st.n}${st.mirror?' mirrored':''} · Diyas ${diyaCount(layers)}/${MAX_DIYAS}`; }
+  function status(){ $('status').textContent = `Centre ×${st.n}${st.mirror?' mirrored':''} · Diyas ${diyaCount(layers)}/${MAX_DIYAS}`; if (typeof updateDock==='function') updateDock(); }
 
   /* ---------- actions ---------- */
   $('undo').onclick = () => restore(hist, redoStack);
@@ -981,7 +1030,7 @@ li.off .lrow{opacity:.5}
     if (selId) deselect();
     lit=!lit; $('done').textContent = lit ? 'Keep decorating' : 'Done';
     $('done').classList.toggle('primary', !lit); $('done').classList.toggle('keep', lit); floorEl.classList.toggle('lit', lit); paintGuides();
-    $('note').hidden = !lit;
+    $('note').hidden = !lit; $('floorbar').classList.toggle('lit', lit); if (lit && trayOpen()) setTray(false);
     ['undo','redo','clear'].forEach(id => $(id).classList.toggle('lockedLit', lit)); updateButtons();
     $('export').hidden = !lit;
     if (lit){ const d=diyaCount(layers); toast(d ? `${d} diya${d>1?'s':''} lit` : 'Rangoli finished. Add diyas to light them next time.');
@@ -1164,17 +1213,50 @@ li.off .lrow{opacity:.5}
       b.setAttribute('aria-label', f.name+' marigold'); b.innerHTML=`<img src="${f.src}" alt="">${f.name}`; b.onclick=()=>pick(k); el.appendChild(b); });
     return () => el.querySelectorAll('.flbtn').forEach(b => b.setAttribute('aria-pressed', b.dataset.v===get()));
   }
-  const refreshFl = buildFlowerPick($('flowerPick'), ()=>st.flower, k => { st.flower=k; $('flowerName').textContent=FLOWERS[k].name; refreshFl(); });
+  const refreshFl = buildFlowerPick($('flowerPick'), ()=>st.flower, k => { st.flower=k; $('flowerName').textContent=FLOWERS[k].name; refreshFl(); status(); });
   refreshFl();
   const refreshEdFl = buildFlowerPick($('edFlowerPick'), ()=>selLayer()?.variant, k => {
     const L=selLayer(); if (!L || L.variant===k) return;
     pushHistory(); setProp('variant',k,false); setProp('color',FLOWERS[k].color,false);
   });
 
-  /* ---------- phone layers drawer ---------- */
+  /* ---------- phone: Done in the top bar, tools as a tray, summary dock ---------- */
   const isPhone = () => matchMedia('(max-width:759px)').matches;
   const drawerOpen = () => $('layersPanel').classList.contains('open');
+  const TOOL_ICON = {
+    powder:'<svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M5 20c1.2-4.2 3.8-6.5 7-6.5s5.8 2.3 7 6.5" fill="currentColor" fill-opacity=".35"/><g fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.4"/><circle cx="8.5" cy="8.5" r="1.2"/><circle cx="15.5" cy="8.5" r="1.2"/><circle cx="12" cy="10.5" r="1.1"/></g></svg>',
+    petal:'<svg viewBox="0 0 24 24"><path d="M4 18C6 9 13 4 20 4c0 7-5 14-14 16z"/><path d="M6 18L15 9"/></svg>',
+    leaf:'<svg viewBox="0 0 24 24"><path d="M3 20c2-1 3-2 4-3"/><path d="M7 17c-1-8 5-13 14-13-1 9-6 14-14 13z"/><path d="M7 17l9-9"/></svg>',
+    diya:'<svg viewBox="0 0 24 24"><path d="M3 14h18c-1 4-5 6-9 6s-8-2-9-6z"/><path d="M12 3c2 3 2 5 0 7-2-2-2-4 0-7z"/></svg>'
+  };
+  function updateDock(){
+    const t=st.tool; $('dkTool').textContent = {powder:'Powder', petal:'Petals', leaf:'Leaves', flower:'Flowers', diya:'Diya'}[t];
+    $('dkIco').innerHTML = t==='flower' ? `<img src="${FLOWERS[st.flower].src}" alt="">` : TOOL_ICON[t];
+    const chip=$('dkChip');
+    if (t==='flower'){ chip.style.background=`center/cover url('${FLOWERS[st.flower].src}')`; $('dkColName').textContent=FLOWERS[st.flower].name+' marigold'; chip.hidden=false; }
+    else if (t==='diya'){ chip.hidden=true; $('dkColName').textContent=`${diyaCount(layers)} of ${MAX_DIYAS} placed`; }
+    else { chip.hidden=false; chip.style.background = st.color2 ? `linear-gradient(135deg, ${st.color}, ${st.color2})` : st.color;
+      $('dkColName').textContent = st.color2 ? `${colorName(st.color)} to ${colorName(st.color2)}` : colorName(st.color); }
+    $('dkRep').textContent = t==='diya' ? '' : '×'+st.n;
+    $('dock').setAttribute('aria-label', `Open tools. ${$('dkTool').textContent}, ${$('dkColName').textContent}${t==='diya'?'':', repeat '+st.n}`);
+  }
+  const trayOpen = () => $('toolsPanel').classList.contains('open');
+  function setTray(open){
+    if (open && drawerOpen()) setDrawer(false);
+    $('toolsPanel').classList.toggle('open', open); $('trayScrim').hidden = !open; $('dock').setAttribute('aria-expanded', open);
+    if (open) $('trayClose').focus({preventScroll:true}); else if (isPhone()) $('dock').focus({preventScroll:true});
+  }
+  $('dock').onclick = () => setTray(!trayOpen());
+  $('trayClose').onclick = () => setTray(false);
+  $('trayScrim').onclick = () => setTray(false);
+  document.addEventListener('keydown', e => { if (e.key==='Escape' && trayOpen()) setTray(false); });
+  function placeMajor(){ const m=$('major'); if (isPhone()){ if (m.parentNode!==$('floorbar')) $('floorbar').appendChild(m); } else if (m.parentNode!==$('actions')) $('actions').appendChild(m); }
+  matchMedia('(max-width:759px)').addEventListener('change', e => { placeMajor(); if (!e.matches) setTray(false); });
+  placeMajor(); updateDock();
+
+  /* ---------- phone layers drawer ---------- */
   function setDrawer(open){
+    if (open && trayOpen()) setTray(false);
     $('layersPanel').classList.toggle('open', open); $('scrim').hidden = !open;
     $('layersBtn').setAttribute('aria-expanded', open);
     if (!open && selId) deselect();
