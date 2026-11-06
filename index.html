@@ -326,9 +326,10 @@ li.off .lrow{opacity:.5}
   <div class="sheet">
     <h2 id="exTitle">Happy Diwali!</h2>
     <img id="exImg" alt="Your finished rangoli with lit diyas">
+    <p class="hint" id="exInfo"></p>
     <p class="hint" id="exMsg">Your rangoli is lit. Save it as a picture to share your Diwali wishes with family.</p>
     <div class="row">
-      <button class="btn primary" id="exSave">Download PNG</button>
+      <button class="btn primary" id="exSave">Download picture</button>
       <button class="btn" id="exClose">Close</button>
     </div>
   </div>
@@ -1011,11 +1012,37 @@ li.off .lrow{opacity:.5}
   let dl = null, exCanvas = null;
   try { window.claude?.use?.('downloads')?.then(d => { dl = d; }).catch(() => {}); } catch(e){}
   const exMsg = t => $('exMsg').textContent = t;
+  /* the saved picture is a JPEG kept under 800 KB: quality steps down first, then size, until it fits */
+  const MAX_BYTES = 800*1000, FILE = 'reminiscing-rangoli.jpg';
+  let exBlob = null, exReady = null, exUrl = null;
+  const toBlobP = (c, q) => new Promise(r => { try { c.toBlob(b => r(b), 'image/jpeg', q); } catch(e){ r(null); } });
+  async function makePicture(src){
+    let best = null;
+    for (const side of [1000, 900, 800, 700]){
+      const c = document.createElement('canvas'); c.width = c.height = side;
+      const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(src, 0, 0, side, side);
+      for (const q of [0.92, 0.88, 0.84, 0.8, 0.75, 0.7, 0.64]){
+        const b = await toBlobP(c, q); if (!b) continue;
+        best = { blob:b, side, q };
+        if (b.size <= MAX_BYTES) return best;
+      }
+    }
+    return best;
+  }
   function openExport(){
     exCanvas = document.createElement('canvas'); exCanvas.width = exCanvas.height = S;
     const x = exCanvas.getContext('2d');
     ['cFloor','cArt','cFx'].forEach(id => x.drawImage($(id),0,0));
-    $('exImg').src = exCanvas.toDataURL('image/png');
+    exBlob = null; $('exInfo').textContent = 'Preparing your picture…'; $('exSave').disabled = true;
+    exReady = makePicture(exCanvas).then(r => {
+      exBlob = r && r.blob;
+      if (exUrl) URL.revokeObjectURL(exUrl);
+      if (exBlob){ exUrl = URL.createObjectURL(exBlob); $('exImg').src = exUrl;
+        $('exInfo').textContent = `JPG · ${r.side} × ${r.side} px · ${Math.max(1, Math.round(exBlob.size/1000))} KB`; }
+      else { $('exImg').src = exCanvas.toDataURL('image/jpeg', .8); $('exInfo').textContent = ''; }
+      $('exSave').disabled = false;
+    });
+    $('exImg').src = exCanvas.toDataURL('image/jpeg', .6);
     exMsg('Your rangoli is lit. Save it as a picture to share your Diwali wishes with family.');
     $('exModal').hidden = false; $('exSave').focus();
   }
@@ -1025,20 +1052,20 @@ li.off .lrow{opacity:.5}
   $('exModal').addEventListener('click', e => { if (e.target.id === 'exModal') closeExport(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeExport(); });
   $('exSave').onclick = async () => {
+    if (exReady) await exReady;
+    const blob = exBlob;
+    if (!blob){ exMsg("Couldn't make the picture here. Right-click or long-press the picture to save it."); return; }
     if (!dl){
       if (!window.claude){
-        exCanvas.toBlob(blob => {
-          const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='reminiscing-rangoli.png';
-          document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
-          exMsg('Saved as reminiscing-rangoli.png.');
-        }, 'image/png');
+        const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=FILE;
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+        exMsg(`Saved as ${FILE}.`);
       } else exMsg("Downloading isn't available in this view. Right-click or long-press the picture to save it.");
       return;
     }
     try {
-      const blob = await new Promise(r => exCanvas.toBlob(r, 'image/png'));
-      await dl.save({ filename:'reminiscing-rangoli.png', data:blob });
-      exMsg('Saved as reminiscing-rangoli.png.');
+      await dl.save({ filename:FILE, data:blob });
+      exMsg(`Saved as ${FILE}.`);
     } catch(e){
       exMsg(e && e.code === 'declined' ? 'Download cancelled.' :
         e && e.code === 'rate_limited' ? 'A save prompt is already open. Try again in a moment.' :
